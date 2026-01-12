@@ -56,6 +56,7 @@ class MatchScraper:
             
             print(f"[API-Football] Fetching matches for {today}...")
             
+            # Първо вземаме мачовете
             url = f"{self.base_url}/fixtures"
             params = {
                 'date': today,
@@ -69,6 +70,11 @@ class MatchScraper:
                 
                 if data.get('response'):
                     matches = self._parse_matches(data['response'])
+                    
+                    # Добавяме коефициенти за всеки мач
+                    print("[API-Football] Fetching odds...")
+                    matches = self._fetch_odds_for_matches(matches)
+                    
                     filtered = self._filter_today_only(matches)
                     print(f"[API-Football] [OK] Found {len(filtered)} matches for today")
                     return filtered
@@ -106,6 +112,28 @@ class MatchScraper:
             teams = match.get('teams', {})
             league = match.get('league', {})
             
+            # Извличане на коефициенти (ако са налични)
+            odds_data = match.get('odds', [])
+            home_odds = None
+            draw_odds = None
+            away_odds = None
+            
+            # Търсене на букмейкърски коефициенти
+            for bookmaker in odds_data:
+                for bet in bookmaker.get('bets', []):
+                    if bet.get('name') == 'Match Winner':
+                        values = bet.get('values', [])
+                        for value in values:
+                            if value.get('value') == 'Home':
+                                home_odds = float(value.get('odd', 0))
+                            elif value.get('value') == 'Draw':
+                                draw_odds = float(value.get('odd', 0))
+                            elif value.get('value') == 'Away':
+                                away_odds = float(value.get('odd', 0))
+                        break
+                if home_odds:
+                    break
+            
             parsed_match = {
                 'id': fixture.get('id'),
                 'date': fixture.get('date'),
@@ -116,6 +144,9 @@ class MatchScraper:
                 'away_team': teams.get('away', {}).get('name', 'Unknown'),
                 'home_logo': teams.get('home', {}).get('logo', ''),
                 'away_logo': teams.get('away', {}).get('logo', ''),
+                'home_odds': home_odds,
+                'draw_odds': draw_odds,
+                'away_odds': away_odds,
             }
             
             parsed_matches.append(parsed_match)
@@ -226,6 +257,57 @@ class MatchScraper:
         except Exception as e:
             print(f"Грешка при извличане на статистики: {e}")
             return self._get_demo_team_stats()
+    
+    def _fetch_odds_for_matches(self, matches: List[Dict]) -> List[Dict]:
+        """
+        Вземане на коефициенти за всички мачове
+        
+        Args:
+            matches: Списък с мачове
+            
+        Returns:
+            List[Dict]: Мачове с добавени коефициенти
+        """
+        for match in matches:
+            match_id = match.get('id')
+            if not match_id:
+                continue
+            
+            try:
+                url = f"{self.base_url}/odds"
+                params = {
+                    'fixture': match_id,
+                    'bet': 1  # Match Winner
+                }
+                
+                response = requests.get(url, headers=self.headers, params=params, timeout=10)
+                
+                if response.status_code == 200:
+                    odds_data = response.json()
+                    
+                    if odds_data.get('response'):
+                        for bookmaker in odds_data['response']:
+                            bets = bookmaker.get('bookmakers', [])
+                            if bets:
+                                for bet_group in bets:
+                                    for bet in bet_group.get('bets', []):
+                                        if bet.get('name') == 'Match Winner':
+                                            values = bet.get('values', [])
+                                            for value in values:
+                                                if value.get('value') == 'Home':
+                                                    match['home_odds'] = float(value.get('odd', 0))
+                                                elif value.get('value') == 'Draw':
+                                                    match['draw_odds'] = float(value.get('odd', 0))
+                                                elif value.get('value') == 'Away':
+                                                    match['away_odds'] = float(value.get('odd', 0))
+                                            break
+                                    break
+                                break
+            except Exception as e:
+                # Ако няма коефициенти, продължаваме
+                pass
+        
+        return matches
     
     def _filter_today_only(self, matches: List[Dict]) -> List[Dict]:
         """

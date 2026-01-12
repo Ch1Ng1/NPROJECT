@@ -11,11 +11,12 @@ import os
 app = Flask(__name__)
 
 # Инициализация на модулите
-# API-Football key (регистрирай се на https://www.api-football.com/)
+# API ключове
 API_FOOTBALL_KEY = 'bbc0c6a638297557289b83aca01e2948'
+FOOTBALL_DATA_KEY = os.environ.get('FOOTBALL_DATA_KEY', 'YOUR_API_KEY')  # Вземи от GET_API_KEY.md
 
 scraper = MatchScraper(api_key=API_FOOTBALL_KEY, use_livescore=False)
-predictor = MatchPredictor()
+predictor = MatchPredictor(api_key=FOOTBALL_DATA_KEY)
 
 
 @app.route('/')
