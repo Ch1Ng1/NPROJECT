@@ -58,6 +58,11 @@ class MatchPredictor:
         # Препоръка
         recommendation = self._get_recommendation(home_win_prob)
         
+        # Изчисляване на допълнителни прогнози за голове
+        over_2_5_prob = self._calculate_over_2_5_goals(home_team, away_team, match)
+        first_half_goals_prob = self._calculate_first_half_goals(home_team, away_team, match)
+        btts_prob = self._calculate_btts(home_team, away_team, match)
+        
         result = {
             'match_id': match.get('id'),
             'home_team': home_team,
@@ -72,7 +77,10 @@ class MatchPredictor:
             'away_odds': away_odds,
             'prediction_class': prediction_class,
             'recommendation': recommendation,
-            'confidence': self._calculate_confidence(home_win_prob, draw_prob, away_win_prob)
+            'confidence': self._calculate_confidence(home_win_prob, draw_prob, away_win_prob),
+            'over_2_5_goals': round(over_2_5_prob, 2),
+            'first_half_goals': round(first_half_goals_prob, 2),
+            'btts': round(btts_prob, 2)
         }
         
         return result
@@ -297,6 +305,138 @@ class MatchPredictor:
             return "Средна"
         else:
             return "Ниска"
+    
+    def _calculate_over_2_5_goals(self, home_team: str, away_team: str, match: Dict) -> float:
+        """
+        Изчислява вероятността за над 2.5 гола в мача
+        
+        Args:
+            home_team: Име на домакин
+            away_team: Име на гост
+            match: Информация за мача
+            
+        Returns:
+            float: Вероятност в проценти (0-100)
+        """
+        # Базова вероятност за над 2.5 гола
+        probability = 50.0
+        
+        # Фактор 1: Силни нападателни отбори
+        attacking_teams = {
+            'Manchester City', 'Liverpool', 'Bayern Munich', 'Barcelona', 
+            'Real Madrid', 'Paris Saint Germain', 'Borussia Dortmund'
+        }
+        
+        if home_team in attacking_teams:
+            probability += 15
+        if away_team in attacking_teams:
+            probability += 15
+            
+        # Фактор 2: Слаби защити
+        if home_team in self.weak_teams:
+            probability += 10
+        if away_team in self.weak_teams:
+            probability += 10
+        
+        # Фактор 3: Топ първенства имат повече голове
+        league = match.get('league', '')
+        if any(l in league for l in ['Premier League', 'Bundesliga']):
+            probability += 8
+        elif 'Serie A' in league:
+            probability -= 5  # По-дефанзивна лига
+            
+        # Случаен фактор
+        random_factor = random.uniform(-8, 8)
+        probability += random_factor
+        
+        # Ограничаване
+        probability = max(20, min(85, probability))
+        
+        return probability
+    
+    def _calculate_first_half_goals(self, home_team: str, away_team: str, match: Dict) -> float:
+        """
+        Изчислява вероятността за голове в първото полувреме
+        
+        Args:
+            home_team: Име на домакин
+            away_team: Име на гост
+            match: Информация за мача
+            
+        Returns:
+            float: Вероятност в проценти (0-100)
+        """
+        # Базова вероятност за гол в първо полувреме
+        probability = 55.0
+        
+        # Фактор 1: Силни атакуващи отбори започват агресивно
+        attacking_teams = {
+            'Manchester City', 'Liverpool', 'Bayern Munich', 'Barcelona', 
+            'Real Madrid', 'Borussia Dortmund'
+        }
+        
+        if home_team in attacking_teams or away_team in attacking_teams:
+            probability += 12
+            
+        # Фактор 2: Топ първенства - по-бързо темпо
+        league = match.get('league', '')
+        if any(l in league for l in ['Premier League', 'Bundesliga']):
+            probability += 8
+            
+        # Фактор 3: Слаби отбори допускат ранни голове
+        if home_team in self.weak_teams or away_team in self.weak_teams:
+            probability += 10
+        
+        # Случаен фактор
+        random_factor = random.uniform(-7, 7)
+        probability += random_factor
+        
+        # Ограничаване
+        probability = max(25, min(80, probability))
+        
+        return probability
+    
+    def _calculate_btts(self, home_team: str, away_team: str, match: Dict) -> float:
+        """
+        Изчислява вероятността за голове и за двата отбора (BTTS - Both Teams To Score)
+        
+        Args:
+            home_team: Име на домакин
+            away_team: Име на гост
+            match: Информация за мача
+            
+        Returns:
+            float: Вероятност в проценти (0-100)
+        """
+        # Базова вероятност
+        probability = 48.0
+        
+        # Фактор 1: И двата отбора силни - вероятно ще вкарат
+        if home_team in self.strong_teams and away_team in self.strong_teams:
+            probability += 20
+            
+        # Фактор 2: И двата слаби - слаби защити
+        if home_team in self.weak_teams and away_team in self.weak_teams:
+            probability += 15
+            
+        # Фактор 3: Балансирани мачове
+        if (home_team in self.strong_teams and away_team not in self.weak_teams) or \
+           (away_team in self.strong_teams and home_team not in self.weak_teams):
+            probability += 10
+        
+        # Фактор 4: Топ лиги
+        league = match.get('league', '')
+        if any(l in league for l in ['Premier League', 'Bundesliga', 'La Liga']):
+            probability += 8
+        
+        # Случаен фактор
+        random_factor = random.uniform(-6, 6)
+        probability += random_factor
+        
+        # Ограничаване
+        probability = max(25, min(80, probability))
+        
+        return probability
     
     def predict_all_matches(self, matches: List[Dict]) -> List[Dict]:
         """
