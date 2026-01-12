@@ -570,15 +570,38 @@
                         <div class="main-prediction">
                             <div class="pred-item">
                                 <div class="pred-label">🏠 Домакин</div>
-                                <div class="pred-value home">${pred.home_win_probability}%</div>
+                                <div class="pred-value home">${pred.home_odds}</div>
                             </div>
                             <div class="pred-item">
                                 <div class="pred-label">🤝 Равен</div>
-                                <div class="pred-value draw">${pred.draw_probability}%</div>
+                                <div class="pred-value draw">${pred.draw_odds}</div>
                             </div>
                             <div class="pred-item">
                                 <div class="pred-label">✈️ Гост</div>
-                                <div class="pred-value away">${pred.away_win_probability}%</div>
+                                <div class="pred-value away">${pred.away_odds}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion">
+                            <div class="accordion-header" onclick="toggleAccordion(${index}, 'probs')">
+                                <span class="accordion-title">📊 Вероятности</span>
+                                <span class="accordion-arrow" id="arrow-probs-${index}">▼</span>
+                            </div>
+                            <div class="accordion-content" id="content-probs-${index}">
+                                <div class="accordion-grid">
+                                    <div class="accordion-item">
+                                        <div class="accordion-item-label">🏠 Домакин</div>
+                                        <div class="accordion-item-value" style="color: #22d3ee">${pred.home_win_probability}%</div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <div class="accordion-item-label">🤝 Равен</div>
+                                        <div class="accordion-item-value" style="color: #fbbf24">${pred.draw_probability}%</div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <div class="accordion-item-label">✈️ Гост</div>
+                                        <div class="accordion-item-value" style="color: #fb7185">${pred.away_win_probability}%</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -600,29 +623,6 @@
                                     <div class="accordion-item">
                                         <div class="accordion-item-label">🎲 BTTS</div>
                                         <div class="accordion-item-value" style="color: ${pred.btts >= 55 ? '#22d3ee' : '#fb7185'}">${pred.btts}%</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="accordion">
-                            <div class="accordion-header" onclick="toggleAccordion(${index}, 'odds')">
-                                <span class="accordion-title">💰 Коефициенти</span>
-                                <span class="accordion-arrow" id="arrow-odds-${index}">▼</span>
-                            </div>
-                            <div class="accordion-content" id="content-odds-${index}">
-                                <div class="accordion-grid">
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🏠 Домакин</div>
-                                        <div class="accordion-item-value" style="color: #22d3ee">${pred.home_odds}</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🤝 Равен</div>
-                                        <div class="accordion-item-value" style="color: #fbbf24">${pred.draw_odds}</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">✈️ Гост</div>
-                                        <div class="accordion-item-value" style="color: #fb7185">${pred.away_odds}</div>
                                     </div>
                                 </div>
                             </div>

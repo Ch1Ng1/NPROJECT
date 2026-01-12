@@ -198,7 +198,8 @@ class MatchPredictor:
         # Препоръка базирана на всички статистики
         recommendation = self._get_smart_recommendation(
             home_win_prob, draw_prob, away_win_prob,
-            over_2_5_prob, first_half_goals_prob, btts_prob
+            over_2_5_prob, first_half_goals_prob, btts_prob,
+            home_odds, draw_odds, away_odds
         )
         
         result = {
@@ -533,10 +534,11 @@ class MatchPredictor:
     
     def _get_smart_recommendation(
         self, home_prob: float, draw_prob: float, away_prob: float,
-        over_2_5: float, first_half: float, btts: float
+        over_2_5: float, first_half: float, btts: float,
+        home_odds: float = None, draw_odds: float = None, away_odds: float = None
     ) -> str:
         """
-        Интелигентна препоръка базирана на всички статистики
+        Интелигентна препоръка базирана на всички статистики с коефициенти
         
         Args:
             home_prob: Вероятност за победа домакин
@@ -545,6 +547,9 @@ class MatchPredictor:
             over_2_5: Вероятност за над 2.5 гола
             first_half: Вероятност за гол в 1во полувреме
             btts: Вероятност за BTTS
+            home_odds: Коефициент за домакин
+            draw_odds: Коефициент за равен
+            away_odds: Коефициент за гост
             
         Returns:
             str: Препоръка за залог
@@ -553,33 +558,54 @@ class MatchPredictor:
         
         # Проверка за резултат (1/X/2)
         if home_prob >= 65:
-            recommendations.append(f"1 (Домакин {home_prob:.0f}%)")
+            if home_odds and home_odds < 999:
+                recommendations.append(f"1 (Коеф {home_odds})")
+            else:
+                recommendations.append(f"1 ({home_prob:.0f}%)")
         elif away_prob >= 60:
-            recommendations.append(f"2 (Гост {away_prob:.0f}%)")
+            if away_odds and away_odds < 999:
+                recommendations.append(f"2 (Коеф {away_odds})")
+            else:
+                recommendations.append(f"2 ({away_prob:.0f}%)")
         elif draw_prob >= 35:
-            recommendations.append(f"X (Равен {draw_prob:.0f}%)")
+            if draw_odds and draw_odds < 999:
+                recommendations.append(f"X (Коеф {draw_odds})")
+            else:
+                recommendations.append(f"X ({draw_prob:.0f}%)")
         
-        # Double Chance
+        # Double Chance - изчисляваме приблизителни коефициенти
         if home_prob + draw_prob >= 75:
-            recommendations.append(f"1X ({home_prob + draw_prob:.0f}%)")
+            # 1X коефициент е приблизително обратното на комбинираната вероятност
+            prob_1x = (home_prob + draw_prob) / 100
+            odds_1x = round(1 / prob_1x, 2) if prob_1x > 0 else 0
+            recommendations.append(f"1X (~{odds_1x})")
         elif away_prob + draw_prob >= 70:
-            recommendations.append(f"X2 ({away_prob + draw_prob:.0f}%)")
+            prob_x2 = (away_prob + draw_prob) / 100
+            odds_x2 = round(1 / prob_x2, 2) if prob_x2 > 0 else 0
+            recommendations.append(f"X2 (~{odds_x2})")
         elif home_prob + away_prob >= 75:
-            recommendations.append(f"12 ({home_prob + away_prob:.0f}%)")
+            prob_12 = (home_prob + away_prob) / 100
+            odds_12 = round(1 / prob_12, 2) if prob_12 > 0 else 0
+            recommendations.append(f"12 (~{odds_12})")
         
-        # Голове
+        # Голове - изчисляваме приблизителни коефициенти
         if over_2_5 >= 65:
-            recommendations.append(f"Над 2.5 ({over_2_5:.0f}%)")
+            over_odds = round(100 / over_2_5, 2) if over_2_5 > 0 else 0
+            recommendations.append(f"Над 2.5 (~{over_odds})")
         elif over_2_5 <= 35:
-            recommendations.append(f"Под 2.5 ({100 - over_2_5:.0f}%)")
+            under_odds = round(100 / (100 - over_2_5), 2) if over_2_5 < 100 else 0
+            recommendations.append(f"Под 2.5 (~{under_odds})")
         
         if first_half >= 65:
-            recommendations.append(f"Гол 1во пол. ({first_half:.0f}%)")
+            fh_odds = round(100 / first_half, 2) if first_half > 0 else 0
+            recommendations.append(f"Гол 1во (~{fh_odds})")
         
         if btts >= 65:
-            recommendations.append(f"BTTS Да ({btts:.0f}%)")
+            btts_odds = round(100 / btts, 2) if btts > 0 else 0
+            recommendations.append(f"BTTS Да (~{btts_odds})")
         elif btts <= 35:
-            recommendations.append(f"BTTS Не ({100 - btts:.0f}%)")
+            btts_no_odds = round(100 / (100 - btts), 2) if btts < 100 else 0
+            recommendations.append(f"BTTS Не (~{btts_no_odds})")
         
         # Комбинирани залози
         if home_prob >= 60 and over_2_5 >= 60:
@@ -597,11 +623,20 @@ class MatchPredictor:
             # Ако няма силни препоръки, покажи най-вероятното
             max_prob = max(home_prob, draw_prob, away_prob)
             if max_prob == home_prob:
-                return f"Леко предимство: 1 ({home_prob:.0f}%)"
+                if home_odds and home_odds < 999:
+                    return f"Леко предимство: 1 (Коеф {home_odds})"
+                else:
+                    return f"Леко предимство: 1 ({home_prob:.0f}%)"
             elif max_prob == away_prob:
-                return f"Леко предимство: 2 ({away_prob:.0f}%)"
+                if away_odds and away_odds < 999:
+                    return f"Леко предимство: 2 (Коеф {away_odds})"
+                else:
+                    return f"Леко предимство: 2 ({away_prob:.0f}%)"
             else:
-                return f"Балансиран мач: X ({draw_prob:.0f}%)"
+                if draw_odds and draw_odds < 999:
+                    return f"Балансиран мач: X (Коеф {draw_odds})"
+                else:
+                    return f"Балансиран мач: X ({draw_prob:.0f}%)"
     
     def _calculate_confidence(self, home_prob: float, draw_prob: float, away_prob: float) -> str:
         """

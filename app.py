@@ -32,6 +32,10 @@ def get_matches():
         # Получаване на мачове
         matches = scraper.get_today_matches()
         
+        # Вземане на коефициенти за първите 30 мача
+        if matches and len(matches) <= 50:
+            matches = scraper.fetch_odds_for_selected_matches(matches, max_matches=30)
+        
         # Прогнозиране
         predictions = predictor.predict_all_matches(matches)
         
@@ -57,6 +61,11 @@ def get_top_predictions():
         
         # Получаване на мачове
         matches = scraper.get_today_matches()
+        
+        # Вземане на коефициенти за всички мачове (оптимизирано до 30)
+        if matches and len(matches) <= 50:
+            print(f"[API] Fetching odds for {min(len(matches), 30)} matches...")
+            matches = scraper.fetch_odds_for_selected_matches(matches, max_matches=30)
         
         # Прогнозиране
         all_predictions = predictor.predict_all_matches(matches)
