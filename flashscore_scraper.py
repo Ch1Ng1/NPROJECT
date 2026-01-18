@@ -7,8 +7,12 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import re
+import logging
 from typing import Optional, Dict, List
 from datetime import datetime
+
+# Настройка на логване
+logger = logging.getLogger(__name__)
 
 
 class FlashScoreScraper:
@@ -58,16 +62,19 @@ class FlashScoreScraper:
         try:
             self._rate_limit()
             url = f"{self.BASE_URL}/football/"
-            print(f"[FlashScore] Fetching: {url}")
+            logger.info(f"Fetching: {url}")
             
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
             
-            print(f"[FlashScore] Response status: {response.status_code}")
+            logger.info(f"Response status: {response.status_code}")
             return response.text
             
+        except requests.exceptions.Timeout:
+            logger.error("Request timeout while fetching matches")
+            return None
         except requests.exceptions.RequestException as e:
-            print(f"[FlashScore] Error fetching matches: {e}")
+            logger.error(f"Error fetching matches: {e}")
             return None
     
     def parse_odds_from_html(self, html: str, home_team: str, away_team: str) -> Optional[Dict[str, float]]:

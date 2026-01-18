@@ -5,18 +5,24 @@ Flask приложение за прогнозиране на футболни �
 from flask import Flask, render_template, jsonify, request
 from match_scraper import MatchScraper
 from predictor import MatchPredictor
+from config import Config
 from datetime import datetime
 import os
+import logging
+
+# Настройка на логване
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config.from_object(Config)
 
 # Инициализация на модулите
-# API ключове
-API_FOOTBALL_KEY = 'bbc0c6a638297557289b83aca01e2948'
-FOOTBALL_DATA_KEY = os.environ.get('FOOTBALL_DATA_KEY', 'YOUR_API_KEY')  # Вземи от GET_API_KEY.md
-
-scraper = MatchScraper(api_key=API_FOOTBALL_KEY, use_livescore=False)
-predictor = MatchPredictor(api_key=FOOTBALL_DATA_KEY)
+scraper = MatchScraper(api_key=Config.API_FOOTBALL_KEY, use_livescore=False)
+predictor = MatchPredictor(api_key=Config.FOOTBALL_DATA_KEY)
 
 
 @app.route('/')
@@ -29,6 +35,7 @@ def index():
 def get_matches():
     """API endpoint за получаване на мачове"""
     try:
+        logger.info("Fetching today's matches...")
         # Получаване на мачове
         matches = scraper.get_today_matches()
         
@@ -38,6 +45,7 @@ def get_matches():
         
         # Прогнозиране
         predictions = predictor.predict_all_matches(matches)
+        logger.info(f"Successfully generated {len(predictions)} predictions")
         
         return jsonify({
             'success': True,
@@ -45,6 +53,7 @@ def get_matches():
             'predictions': predictions
         })
     except Exception as e:
+        logger.error(f"Error in /api/matches: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

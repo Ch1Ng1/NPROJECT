@@ -1,12 +1,15 @@
 """
 Модул за прогнозиране на победители в футболни мачове
-Използва реална статистика от Football-Data.org API
+Използва реална статистика от API-Football за последните мачове
 """
 
 import random
 import requests
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MatchPredictor:
@@ -17,135 +20,146 @@ class MatchPredictor:
         Инициализация на предиктора
         
         Args:
-            api_key: Football-Data.org API ключ
+            api_key: API-Football ключ за извличане на статистика
         """
         self.api_key = api_key
-        self.base_url = "https://api.football-data.org/v4"
+        self.base_url = "https://v3.football.api-sports.io"
         self.headers = {
-            'X-Auth-Token': api_key if api_key else 'YOUR_API_KEY'
+            'x-apisports-key': api_key if api_key else 'YOUR_API_KEY'
         }
         self.team_cache = {}  # Кеш за статистики на отбори
-    
-    def get_team_stats(self, team_name: str, league: str) -> Optional[Dict]:
+        
+    def get_team_last_matches(self, team_id: int, last: int = 5) -> Optional[List[Dict]]:
         """
-        Извлича статистики за отбор от API
+        Извлича последните мачове на отбор от API-Football
         
         Args:
-            team_name: Име на отбора
-            league: Лига
+            team_id: ID на отбора
+            last: Брой мачове
             
         Returns:
-            Optional[Dict]: Статистики или None
+            List[Dict]: Списък с последните мачове или None
         """
-        cache_key = f"{team_name}_{league}"
+        if not self.api_key or self.api_key == '':
+            logger.warning(f"No API key - cannot fetch stats for team {team_id}")
+            return None
+            
+        cache_key = f"team_{team_id}_last_{last}"
         
         # Проверка в кеша
         if cache_key in self.team_cache:
+            logger.info(f"Using cached stats for team {team_id}")
             return self.team_cache[cache_key]
         
-        if not self.api_key or self.api_key == 'YOUR_API_KEY':
-            return None
-        
         try:
-            # Търсене на отбора
-            url = f"{self.base_url}/teams"
-            params = {'name': team_name}
+            url = f"{self.base_url}/fixtures"
+            params = {
+                'team': team_id,
+                'last': last,
+                'status': 'FT'  # Само завършени мачове
+            }
             
+            logger.info(f"Fetching last {last} matches for team {team_id}...")
             response = requests.get(url, headers=self.headers, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                if data.get('teams'):
-                    team_id = data['teams'][0]['id']
-                    
-                    # Вземане на статистики
-                    stats_url = f"{self.base_url}/teams/{team_id}/matches"
-                    params = {
-                        'status': 'FINISHED',
-                        'limit': 10  # Последни 10 мача
-                    }
-                    
-                    stats_response = requests.get(stats_url, headers=self.headers, params=params, timeout=10)
-                    
-                    if stats_response.status_code == 200:
-                        matches_data = stats_response.json()
-                        stats = self._parse_team_stats(matches_data, team_name)
-                        self.team_cache[cache_key] = stats
-                        return stats
-        except:
-            pass
-        
-        return None
+                matches = data.get('response', [])
+                self.team_cache[cache_key] = matches
+                logger.info(f"Found {len(matches)} matches for team {team_id}")
+                return matches
+            else:
+                logger.error(f"API returned status {response.status_code}")
+                return None
+        except Exception as e:
+            logger.error(f"Error fetching team stats: {e}")
+            return None
     
-    def _parse_team_stats(self, matches_data: Dict, team_name: str) -> Dict:
+    def analyze_team_form(self, matches: List[Dict], team_id: int) -> Dict:
         """
-        Обработва статистики от мачове
+        Анализира формата на отбора от последните мачове
         
         Args:
-            matches_data: Данни за мачове
-            team_name: Име на отбора
+            matches: Списък с мачове
+            team_id: ID на отбора
             
         Returns:
-            Dict: Обработени статистики
+            Dict: Статистики за формата
         """
-        matches = matches_data.get('matches', [])
-        
         stats = {
             'wins': 0,
             'draws': 0,
             'losses': 0,
             'goals_scored': 0,
             'goals_conceded': 0,
-            'home_wins': 0,
-            'home_games': 0,
-            'away_wins': 0,
-            'away_games': 0,
-            'form': []  # Последни 5 мача (W/D/L)
+            'clean_sheets': 0,
+            'form': [],  # W/D/L
+            'points': 0,  # 3 за победа, 1 за равен
+            'home_performance': {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0},
+            'away_performance': {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0}
         }
         
-        for match in matches[:10]:
-            home_team = match.get('homeTeam', {}).get('name', '')
-            away_team = match.get('awayTeam', {}).get('name', '')
-            score = match.get('score', {}).get('fullTime', {})
+        for match in matches:
+            teams = match.get('teams', {})
+            goals = match.get('goals', {})
             
-            home_score = score.get('home', 0)
-            away_score = score.get('away', 0)
+            home_id = teams.get('home', {}).get('id')
+            away_id = teams.get('away', {}).get('id')
+            home_goals = goals.get('home', 0)
+            away_goals = goals.get('away', 0)
             
-            is_home = home_team == team_name
-            team_score = home_score if is_home else away_score
-            opponent_score = away_score if is_home else home_score
+            is_home = (home_id == team_id)
+            team_goals = home_goals if is_home else away_goals
+            opponent_goals = away_goals if is_home else home_goals
             
-            stats['goals_scored'] += team_score
-            stats['goals_conceded'] += opponent_score
+            stats['goals_scored'] += team_goals
+            stats['goals_conceded'] += opponent_goals
+            
+            if opponent_goals == 0:
+                stats['clean_sheets'] += 1
             
             # Определяне на резултата
-            if team_score > opponent_score:
+            if team_goals > opponent_goals:
                 stats['wins'] += 1
                 stats['form'].append('W')
+                stats['points'] += 3
                 if is_home:
-                    stats['home_wins'] += 1
+                    stats['home_performance']['wins'] += 1
+                    stats['home_performance']['goals_for'] += team_goals
+                    stats['home_performance']['goals_against'] += opponent_goals
                 else:
-                    stats['away_wins'] += 1
-            elif team_score < opponent_score:
+                    stats['away_performance']['wins'] += 1
+                    stats['away_performance']['goals_for'] += team_goals
+                    stats['away_performance']['goals_against'] += opponent_goals
+            elif team_goals < opponent_goals:
                 stats['losses'] += 1
                 stats['form'].append('L')
+                if is_home:
+                    stats['home_performance']['losses'] += 1
+                    stats['home_performance']['goals_for'] += team_goals
+                    stats['home_performance']['goals_against'] += opponent_goals
+                else:
+                    stats['away_performance']['losses'] += 1
+                    stats['away_performance']['goals_for'] += team_goals
+                    stats['away_performance']['goals_against'] += opponent_goals
             else:
                 stats['draws'] += 1
                 stats['form'].append('D')
-            
-            if is_home:
-                stats['home_games'] += 1
-            else:
-                stats['away_games'] += 1
-        
-        # Форма - само последните 5
-        stats['form'] = stats['form'][:5]
+                stats['points'] += 1
+                if is_home:
+                    stats['home_performance']['draws'] += 1
+                    stats['home_performance']['goals_for'] += team_goals
+                    stats['home_performance']['goals_against'] += opponent_goals
+                else:
+                    stats['away_performance']['draws'] += 1
+                    stats['away_performance']['goals_for'] += team_goals
+                    stats['away_performance']['goals_against'] += opponent_goals
         
         return stats
     
     def predict_match(self, match: Dict) -> Dict:
         """
-        Прогнозира резултат на мач на база реална статистика или коефициенти
+        Прогнозира резултат на мач на база реална статистика от последните мачове
         
         Args:
             match: Информация за мача
@@ -157,40 +171,78 @@ class MatchPredictor:
         away_team = match.get('away_team', '')
         league = match.get('league', '')
         
+        # Получаване на team ID от мача
+        home_team_id = match.get('home_team_id')
+        away_team_id = match.get('away_team_id')
+        
+        logger.info(f"Predicting: {home_team} vs {away_team}")
+        
+        # Проверка дали статистиката вече е кеширана (от predict_all_matches)
+        home_stats = match.get('_cached_home_stats')
+        away_stats = match.get('_cached_away_stats')
+        
+        # Ако не е кеширана, извлечи я сега (fallback)
+        if home_stats is None and away_stats is None and home_team_id and away_team_id:
+            logger.info(f"No cached stats - fetching for teams {home_team_id} and {away_team_id}")
+            home_matches = self.get_team_last_matches(home_team_id, last=5)
+            away_matches = self.get_team_last_matches(away_team_id, last=5)
+            
+            if home_matches:
+                home_stats = self.analyze_team_form(home_matches, home_team_id)
+            
+            if away_matches:
+                away_stats = self.analyze_team_form(away_matches, away_team_id)
+        
+        # Логване на формата
+        if home_stats:
+            logger.info(f"{home_team} form: {home_stats.get('form')} - W:{home_stats.get('wins')} D:{home_stats.get('draws')} L:{home_stats.get('losses')}")
+        
+        if away_stats:
+            logger.info(f"{away_team} form: {away_stats.get('form')} - W:{away_stats.get('wins')} D:{away_stats.get('draws')} L:{away_stats.get('losses')}")
+        
+        # Изчисляване на вероятности базирани на статистика
+        home_win_prob, draw_prob, away_win_prob = self._calculate_match_probabilities_from_stats(
+            home_team, away_team, match, home_stats, away_stats
+        )
+        
         # Проверка дали има коефициенти от API
         home_odds_api = match.get('home_odds')
         draw_odds_api = match.get('draw_odds')
         away_odds_api = match.get('away_odds')
         
-        # Ако има коефициенти, използвай ги
+        # Ако има коефициенти, комбинирай статистиката с тях
         if home_odds_api and draw_odds_api and away_odds_api:
-            home_win_prob, draw_prob, away_win_prob = self._probabilities_from_odds(
+            odds_home_prob, odds_draw_prob, odds_away_prob = self._probabilities_from_odds(
                 home_odds_api, draw_odds_api, away_odds_api
             )
+            
+            # Ако имаме и статистика, направи 60/40 микс (60% статистика, 40% коефициенти)
+            if home_stats and away_stats:
+                home_win_prob = home_win_prob * 0.6 + odds_home_prob * 0.4
+                draw_prob = draw_prob * 0.6 + odds_draw_prob * 0.4
+                away_win_prob = away_win_prob * 0.6 + odds_away_prob * 0.4
+                logger.info("Combined stats + odds prediction")
+            else:
+                # Само коефициенти
+                home_win_prob = odds_home_prob
+                draw_prob = odds_draw_prob
+                away_win_prob = odds_away_prob
+                logger.info("Odds-based prediction (no stats)")
+            
             home_odds = home_odds_api
             draw_odds = draw_odds_api
             away_odds = away_odds_api
         else:
-            # Опит за вземане на реална статистика
-            home_stats = self.get_team_stats(home_team, league)
-            away_stats = self.get_team_stats(away_team, league)
-            
-            # Изчисляване на вероятности
-            home_win_prob, draw_prob, away_win_prob = self._calculate_match_probabilities(
-                home_team, away_team, match, home_stats, away_stats
-            )
-            
-            # Изчисляване на коефициенти (букмейкърски)
+            # Само статистика - изчисли коефициенти
             home_odds = round(100 / home_win_prob, 2) if home_win_prob > 0 else 999
             draw_odds = round(100 / draw_prob, 2) if draw_prob > 0 else 999
             away_odds = round(100 / away_win_prob, 2) if away_win_prob > 0 else 999
+            logger.info("Stats-based prediction (no odds)")
         
         # Класификация на прогнозата
         prediction_class = self._classify_prediction(home_win_prob)
         
-        # Изчисляване на допълнителни прогнози за голове
-        home_stats = self.get_team_stats(home_team, league)
-        away_stats = self.get_team_stats(away_team, league)
+        # Изчисляване на допълнителни прогнози за голове (използваме вече извлечените статистики)
         over_2_5_prob = self._calculate_over_2_5_goals(home_team, away_team, match, home_stats, away_stats)
         first_half_goals_prob = self._calculate_first_half_goals(home_team, away_team, match, home_stats, away_stats)
         btts_prob = self._calculate_btts(home_team, away_team, match, home_stats, away_stats)
@@ -256,98 +308,121 @@ class MatchPredictor:
         
         return home_prob, draw_prob, away_prob
     
-    def _calculate_match_probabilities(
+    def _calculate_match_probabilities_from_stats(
         self, home_team: str, away_team: str, match: Dict,
         home_stats: Optional[Dict] = None, away_stats: Optional[Dict] = None
     ) -> tuple:
         """
-        Изчислява вероятности базирани на реална статистика
+        Изчислява вероятности базирани на реална статистика от последните 5 мача
         
         Args:
             home_team: Име на домакин
             away_team: Име на гост
             match: Информация за мача
-            home_stats: Статистики на домакина
-            away_stats: Статистики на госта
+            home_stats: Статистики на домакина (от последните 5 мача)
+            away_stats: Статистики на госта (от последните 5 мача)
             
         Returns:
-            tuple: (home_win_prob, draw_prob, away_win_prob)
+            tuple: (home_win_prob, draw_prob, away_win_prob) в проценти
         """
-        # Ако няма реална статистика, използвай базови вероятности
+        # Ако няма статистика, използвай базови вероятности
         if not home_stats or not away_stats:
+            logger.warning("No stats available - using fallback")
             return self._calculate_fallback_probabilities(home_team, away_team, match)
         
         # Базови вероятности с домакинско предимство
-        home_win = 40.0
-        draw = 30.0
+        home_win = 42.0
+        draw = 28.0
         away_win = 30.0
         
-        # Фактор 1: Форма (последни 5 мача)
+        # ФАКТОР 1: Форма (последни 5 мача) - 30% влияние
         home_form_score = self._calculate_form_score(home_stats.get('form', []))
         away_form_score = self._calculate_form_score(away_stats.get('form', []))
         
-        form_diff = home_form_score - away_form_score
-        home_win += form_diff * 2
-        away_win -= form_diff * 2
+        # Форма скор: W=3, D=1, L=0 точки -> максимум 15 точки от 5 мача
+        form_diff = (home_form_score - away_form_score) / 15.0 * 100  # Процентна разлика
+        home_win += form_diff * 0.3
+        away_win -= form_diff * 0.3
         
-        # Фактор 2: Win rate (процент победи)
-        home_total_games = home_stats.get('wins', 0) + home_stats.get('draws', 0) + home_stats.get('losses', 0)
-        away_total_games = away_stats.get('wins', 0) + away_stats.get('draws', 0) + away_stats.get('losses', 0)
+        logger.info(f"Form: Home={home_form_score}/15, Away={away_form_score}/15")
         
-        if home_total_games > 0:
-            home_win_rate = (home_stats.get('wins', 0) / home_total_games) * 100
-            home_win += (home_win_rate - 33) * 0.4  # 33% е базата
+        # ФАКТОР 2: Процент победи - 25% влияние
+        home_total = home_stats.get('wins', 0) + home_stats.get('draws', 0) + home_stats.get('losses', 0)
+        away_total = away_stats.get('wins', 0) + away_stats.get('draws', 0) + away_stats.get('losses', 0)
         
-        if away_total_games > 0:
-            away_win_rate = (away_stats.get('wins', 0) / away_total_games) * 100
-            away_win += (away_win_rate - 33) * 0.3  # По-малък коефициент за гости
+        if home_total > 0:
+            home_win_rate = (home_stats.get('wins', 0) / home_total) * 100
+            home_win += (home_win_rate - 40) * 0.25  # 40% е базата за домакин
         
-        # Фактор 3: Голова разлика (отбелязани vs допуснати)
-        if home_total_games > 0:
-            home_goal_diff = (home_stats.get('goals_scored', 0) - home_stats.get('goals_conceded', 0)) / home_total_games
-            home_win += home_goal_diff * 3
+        if away_total > 0:
+            away_win_rate = (away_stats.get('wins', 0) / away_total) * 100
+            away_win += (away_win_rate - 30) * 0.20  # 30% база за гост
         
-        if away_total_games > 0:
-            away_goal_diff = (away_stats.get('goals_scored', 0) - away_stats.get('goals_conceded', 0)) / away_total_games
-            away_win += away_goal_diff * 2.5
+        # ФАКТОР 3: Голова разлика - 20% влияние
+        if home_total > 0:
+            home_goal_diff = (home_stats.get('goals_scored', 0) - home_stats.get('goals_conceded', 0)) / home_total
+            home_win += home_goal_diff * 4
+            logger.info(f"Home goal diff/match: {home_goal_diff:.2f}")
         
-        # Фактор 4: Home/Away специфична форма
-        if home_stats.get('home_games', 0) > 0:
-            home_win_home_rate = (home_stats.get('home_wins', 0) / home_stats.get('home_games', 1)) * 100
-            home_win += (home_win_home_rate - 40) * 0.3
+        if away_total > 0:
+            away_goal_diff = (away_stats.get('goals_scored', 0) - away_stats.get('goals_conceded', 0)) / away_total
+            away_win += away_goal_diff * 3.5
+            logger.info(f"Away goal diff/match: {away_goal_diff:.2f}")
         
-        if away_stats.get('away_games', 0) > 0:
-            away_win_away_rate = (away_stats.get('away_wins', 0) / away_stats.get('away_games', 1)) * 100
-            away_win += (away_win_away_rate - 25) * 0.3
+        # ФАКТОР 4: Clean sheets (пази нулата) - 10% влияние
+        home_clean_sheet_rate = (home_stats.get('clean_sheets', 0) / home_total) * 100 if home_total > 0 else 0
+        away_clean_sheet_rate = (away_stats.get('clean_sheets', 0) / away_total) * 100 if away_total > 0 else 0
         
-        # Фактор 5: Топ лиги - повече равни
+        home_win += home_clean_sheet_rate * 0.1
+        away_win += away_clean_sheet_rate * 0.08
+        
+        # ФАКТОР 5: Home/Away специфична форма - 15% влияние
+        home_perf = home_stats.get('home_performance', {})
+        away_perf = away_stats.get('away_performance', {})
+        
+        home_home_matches = home_perf.get('wins', 0) + home_perf.get('draws', 0) + home_perf.get('losses', 0)
+        away_away_matches = away_perf.get('wins', 0) + away_perf.get('draws', 0) + away_perf.get('losses', 0)
+        
+        if home_home_matches > 0:
+            home_win_at_home = (home_perf.get('wins', 0) / home_home_matches) * 100
+            home_win += (home_win_at_home - 45) * 0.25  # 45% е добър домакински процент
+            logger.info(f"Home win rate at home: {home_win_at_home:.1f}%")
+        
+        if away_away_matches > 0:
+            away_win_away = (away_perf.get('wins', 0) / away_away_matches) * 100
+            away_win += (away_win_away - 25) * 0.2  # 25% е добър гостуващ процент
+            logger.info(f"Away win rate away: {away_win_away:.1f}%")
+        
+        # ФАКТОР 6: Топ лиги - повече равенства
         league = match.get('league', '')
         if any(l in league for l in ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']):
-            draw += 5
-            home_win -= 2.5
-            away_win -= 2.5
+            draw += 3
+            home_win -= 1.5
+            away_win -= 1.5
         
-        # Случаен фактор (симулира непредвидими фактори)
-        random_factor = random.uniform(-4, 4)
+        # ФАКТОР 7: Малък случаен фактор (симулира непредвидими обстоятелства)
+        random_factor = random.uniform(-2, 2)
         home_win += random_factor
         away_win -= random_factor
         
-        # Нормализиране - сумата трябва да е 100%
+        # Първа нормализация
         total = home_win + draw + away_win
         home_win = (home_win / total) * 100
         draw = (draw / total) * 100
         away_win = (away_win / total) * 100
         
-        # Ограничаване на минимални/максимални стойности
-        home_win = max(10, min(80, home_win))
-        draw = max(10, min(40, draw))
-        away_win = max(10, min(75, away_win))
+        # Ограничаване на минимални/максимални стойности за реализъм
+        home_win = max(15, min(75, home_win))
+        draw = max(15, min(40, draw))
+        away_win = max(15, min(70, away_win))
         
-        # Финална нормализация
+        # Финална нормализация до 100%
         total = home_win + draw + away_win
         home_win = (home_win / total) * 100
         draw = (draw / total) * 100
         away_win = (away_win / total) * 100
+        
+        logger.info(f"Final probabilities: H:{home_win:.1f}% D:{draw:.1f}% A:{away_win:.1f}%")
         
         return home_win, draw, away_win
     
@@ -845,6 +920,7 @@ class MatchPredictor:
     def predict_all_matches(self, matches: List[Dict]) -> List[Dict]:
         """
         Прогнозира всички мачове и сортира по вероятност
+        Оптимизация: извлича статистиката за всички отбори само веднъж
         
         Args:
             matches: Списък с мачове
@@ -852,14 +928,52 @@ class MatchPredictor:
         Returns:
             List[Dict]: Прогнози, сортирани по вероятност
         """
-        predictions = []
+        logger.info(f"Predicting {len(matches)} matches...")
         
+        # Стъпка 1: Събиране на всички уникални team IDs
+        unique_team_ids = set()
         for match in matches:
+            home_id = match.get('home_team_id')
+            away_id = match.get('away_team_id')
+            if home_id:
+                unique_team_ids.add(home_id)
+            if away_id:
+                unique_team_ids.add(away_id)
+        
+        logger.info(f"Found {len(unique_team_ids)} unique teams")
+        
+        # Стъпка 2: Извличане на статистика за всички отбори ВЕДНЪЖ
+        team_stats_cache = {}
+        for team_id in unique_team_ids:
+            logger.info(f"Fetching stats for team {team_id}...")
+            matches_data = self.get_team_last_matches(team_id, last=5)
+            if matches_data:
+                team_stats_cache[team_id] = self.analyze_team_form(matches_data, team_id)
+            else:
+                team_stats_cache[team_id] = None
+        
+        logger.info(f"Stats fetched for {len(team_stats_cache)} teams")
+        
+        # Стъпка 3: Прогнозиране на всички мачове с готовите статистики
+        predictions = []
+        for match in matches:
+            # Вземи статистиката от кеша вместо да я извличаш отново
+            home_id = match.get('home_team_id')
+            away_id = match.get('away_team_id')
+            
+            match['_cached_home_stats'] = team_stats_cache.get(home_id)
+            match['_cached_away_stats'] = team_stats_cache.get(away_id)
+            
             prediction = self.predict_match(match)
             predictions.append(prediction)
         
-        # Сортиране по вероятност (намаляващ ред)
-        predictions.sort(key=lambda x: x['home_win_probability'], reverse=True)
+        # Сортиране по най-висока вероятност (домакин, равен или гост)
+        predictions.sort(
+            key=lambda x: max(x['home_win_probability'], x['draw_probability'], x['away_win_probability']), 
+            reverse=True
+        )
+        
+        logger.info(f"Predictions completed for {len(predictions)} matches")
         
         return predictions
     
