@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Футболни Прогнози - AI Анализатор</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <title>⚽ Smart Football Predictor</title>
     <style>
         * {
             margin: 0;
@@ -13,678 +12,505 @@
         }
         
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
-            color: #f1f5f9;
         }
         
         .container {
-            max-width: 1600px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         
         header {
             text-align: center;
-            margin-bottom: 30px;
-            padding: 40px 30px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(99, 102, 241, 0.4);
+            color: white;
+            padding: 30px 0;
         }
         
-        h1 {
-            font-size: 2.5em;
-            font-weight: 900;
-            margin-bottom: 8px;
-            color: #fff;
-            text-shadow: 2px 2px 20px rgba(0,0,0,0.3);
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
         
         .subtitle {
-            font-size: 1em;
-            color: #e9d5ff;
+            font-size: 1.2em;
+            opacity: 0.9;
         }
         
-        .controls {
-            background: rgba(30, 41, 59, 0.6);
-            backdrop-filter: blur(20px);
-            padding: 25px;
-            border-radius: 20px;
-            margin-bottom: 25px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-        }
-        
-        .control-group {
+        .stats-bar {
             display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        label {
-            font-weight: 600;
-            color: #a78bfa;
-            font-size: 0.85em;
-            text-transform: uppercase;
-        }
-        
-        input[type="number"],
-        select {
-            padding: 10px 14px;
-            background: rgba(15, 23, 42, 0.8);
-            border: 2px solid rgba(148, 163, 184, 0.3);
-            border-radius: 10px;
-            color: #f1f5f9;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-        
-        input:focus,
-        select:focus {
-            outline: none;
-            border-color: #8b5cf6;
-            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 10px;
-            grid-column: 1 / -1;
-        }
-        
-        button {
-            flex: 1;
-            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 700;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(139, 92, 246, 0.5);
-        }
-        
-        button.secondary {
-            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
+            justify-content: center;
+            gap: 30px;
+            margin: 30px 0;
+            flex-wrap: wrap;
         }
         
         .stat-card {
-            background: rgba(30, 41, 59, 0.5);
-            backdrop-filter: blur(20px);
-            padding: 20px;
-            border-radius: 16px;
-            text-align: center;
-            border: 1px solid rgba(148, 163, 184, 0.15);
-            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.95);
+            padding: 20px 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
         }
         
-        .stat-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(139, 92, 246, 0.4);
-        }
-        
-        .stat-value {
-            font-size: 2.2em;
-            font-weight: 900;
-            background: linear-gradient(135deg, #c4b5fd 0%, #8b5cf6 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 6px;
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
         }
         
         .stat-label {
-            color: #cbd5e1;
-            font-size: 0.75em;
-            font-weight: 600;
-            text-transform: uppercase;
+            color: #666;
+            margin-top: 5px;
         }
         
-        .matches-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(550px, 1fr));
-            gap: 20px;
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
             margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .filter-item label {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .filter-item select {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+        
+        .predictions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 25px;
         }
         
         .match-card {
-            background: rgba(30, 41, 59, 0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 18px;
-            padding: 20px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            transition: all 0.3s ease;
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
         }
         
         .match-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(139, 92, 246, 0.3);
-            border-color: rgba(139, 92, 246, 0.4);
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px rgba(0,0,0,0.15);
         }
         
         .match-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid rgba(148, 163, 184, 0.2);
-        }
-        
-        .league-badge {
-            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 0.75em;
-            font-weight: 700;
-            text-transform: uppercase;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
         }
         
         .match-time {
-            color: #cbd5e1;
-            font-size: 0.8em;
-            font-weight: 600;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .match-league {
+            font-size: 0.9em;
+            color: #999;
         }
         
         .teams {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            gap: 12px;
-            align-items: center;
-            margin-bottom: 15px;
-            padding: 12px;
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-            border-radius: 12px;
+            margin: 20px 0;
         }
         
-        .team {
-            text-align: center;
-            font-weight: 700;
-            font-size: 1em;
-            color: #f1f5f9;
-            padding: 8px;
-            background: rgba(15, 23, 42, 0.6);
-            border-radius: 8px;
-        }
-        
-        .vs {
-            color: #a78bfa;
-            font-weight: 900;
-            padding: 4px 12px;
-            background: rgba(139, 92, 246, 0.15);
-            border-radius: 8px;
-        }
-        
-        .main-prediction {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-        
-        .pred-item {
-            text-align: center;
-            padding: 10px;
-            background: rgba(15, 23, 42, 0.4);
-            border-radius: 10px;
-            border: 1px solid rgba(148, 163, 184, 0.15);
-        }
-        
-        .pred-label {
-            font-size: 0.7em;
-            color: #94a3b8;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-        
-        .pred-value {
-            font-size: 1.4em;
-            font-weight: 800;
-            padding: 4px;
-            border-radius: 6px;
-        }
-        
-        .pred-value.home {
-            color: #22d3ee;
-            background: rgba(34, 211, 238, 0.15);
-        }
-        
-        .pred-value.draw {
-            color: #fbbf24;
-            background: rgba(251, 191, 36, 0.15);
-        }
-        
-        .pred-value.away {
-            color: #fb7185;
-            background: rgba(251, 113, 133, 0.15);
-        }
-        
-        .accordion {
-            margin-bottom: 10px;
-        }
-        
-        .accordion-header {
+        .team-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 12px;
-            background: rgba(139, 92, 246, 0.15);
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(139, 92, 246, 0.2);
+            margin: 15px 0;
         }
         
-        .accordion-header:hover {
-            background: rgba(139, 92, 246, 0.25);
+        .team-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            flex: 1;
         }
         
-        .accordion-title {
-            font-size: 0.85em;
-            font-weight: 700;
-            color: #c4b5fd;
-            text-transform: uppercase;
+        .team-elo {
+            background: #f5f5f5;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #667eea;
+            margin-left: 10px;
         }
         
-        .accordion-arrow {
-            transition: transform 0.3s ease;
-            color: #a78bfa;
+        .form-badges {
+            display: flex;
+            gap: 5px;
+            margin-left: 10px;
         }
         
-        .accordion-arrow.open {
-            transform: rotate(180deg);
+        .form-badge {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8em;
+            color: white;
         }
         
-        .accordion-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease;
-        }
+        .form-badge.W { background: #4caf50; }
+        .form-badge.D { background: #ff9800; }
+        .form-badge.L { background: #f44336; }
         
-        .accordion-content.open {
-            max-height: 500px;
-            padding-top: 10px;
-        }
-        
-        .accordion-grid {
+        .probabilities {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
+            gap: 10px;
+            margin: 20px 0;
         }
         
-        .accordion-item {
+        .prob-item {
             text-align: center;
-            padding: 8px;
-            background: rgba(15, 23, 42, 0.4);
-            border-radius: 8px;
-        }
-        
-        .accordion-item-label {
-            font-size: 0.65em;
-            color: #94a3b8;
-            margin-bottom: 4px;
-        }
-        
-        .accordion-item-value {
-            font-size: 1.1em;
-            font-weight: 800;
-        }
-        
-        .recommendation {
-            padding: 10px;
+            padding: 15px;
+            background: #f8f9fa;
             border-radius: 10px;
+        }
+        
+        .prob-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .prob-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .prob-item.highlight {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .prob-item.highlight .prob-label,
+        .prob-item.highlight .prob-value {
+            color: white;
+        }
+        
+        .prediction-box {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
             text-align: center;
-            font-weight: 700;
-            font-size: 0.8em;
-            margin-top: 12px;
-            border: 2px solid;
         }
         
-        .recommendation.high {
-            background: rgba(34, 197, 94, 0.2);
-            color: #4ade80;
-            border-color: #22c55e;
+        .prediction-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
         }
         
-        .recommendation.medium {
-            background: rgba(251, 191, 36, 0.2);
-            color: #fbbf24;
-            border-color: #f59e0b;
+        .prediction-value {
+            font-size: 1.8em;
+            font-weight: bold;
         }
         
-        .recommendation.low {
-            background: rgba(248, 113, 113, 0.2);
-            color: #f87171;
-            border-color: #ef4444;
+        .confidence-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .details {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #f0f0f0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
         }
         
         .loading {
             text-align: center;
             padding: 60px;
-            color: #a78bfa;
-            font-size: 1.2em;
+            color: white;
+            font-size: 1.5em;
         }
         
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(167, 139, 250, 0.3);
-            border-radius: 50%;
-            border-top-color: #a78bfa;
-            animation: spin 0.8s linear infinite;
-            margin-left: 10px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .no-data {
+        .error {
+            background: #f44336;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
             text-align: center;
-            padding: 60px;
-            background: rgba(30, 41, 59, 0.5);
-            border-radius: 20px;
-            color: #9ca3af;
+            margin: 20px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .predictions-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header h1 {
+                font-size: 2em;
+            }
+            
+            .stats-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>⚽ AI Футболен Анализатор</h1>
-            <div class="subtitle">Интелигентни прогнози • <span id="currentDate"></span></div>
+            <h1>⚽ Smart Football Predictor</h1>
+            <p class="subtitle">Интелигентни прогнози на база ELO рейтинг, форма и статистики</p>
         </header>
         
-        <div class="controls">
-            <div class="control-group">
-                <label for="maxResults">🔢 Брой резултати</label>
-                <input type="number" id="maxResults" value="20" min="1" max="100">
+        <div class="stats-bar" id="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalMatches">0</div>
+                <div class="stat-label">Мача днес</div>
             </div>
-            
-            <div class="control-group">
-                <label for="leagueFilter">🏆 Филтър по лига</label>
-                <select id="leagueFilter" onchange="applyFilters()">
-                    <option value="all">Всички лиги</option>
+            <div class="stat-card">
+                <div class="stat-number" id="highConfidence">0</div>
+                <div class="stat-label">Висока увереност</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="avgConfidence">0%</div>
+                <div class="stat-label">Средна увереност</div>
+            </div>
+        </div>
+        
+        <div class="filters">
+            <div class="filter-item">
+                <label>🎯 Увереност:</label>
+                <select id="confidenceFilter">
+                    <option value="all">Всички</option>
+                    <option value="high">Висока (≥60%)</option>
+                    <option value="medium">Средна (45-60%)</option>
+                    <option value="low">Ниска (<45%)</option>
                 </select>
             </div>
             
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="lowOddsOnly" onchange="applyFilters()" style="width: auto; height: auto;">
-                    🎯 Само ниски коефициенти
-                </label>
+            <div class="filter-item">
+                <label>🏆 Прогноза:</label>
+                <select id="predictionFilter">
+                    <option value="all">Всички</option>
+                    <option value="1">Домакин (1)</option>
+                    <option value="X">Равен (X)</option>
+                    <option value="2">Гост (2)</option>
+                </select>
             </div>
             
-            <div class="button-group">
-                <button onclick="loadPredictions()">🔄 Обнови</button>
-                <button class="secondary" onclick="showAllMatches()">📋 Всички</button>
+            <div class="filter-item">
+                <label>⚽ Over 2.5:</label>
+                <select id="goalsFilter">
+                    <option value="all">Всички</option>
+                    <option value="high">Вероятно (≥60%)</option>
+                    <option value="low">Малко вероятно (<60%)</option>
+                </select>
             </div>
         </div>
         
-        <div class="stats" id="stats"></div>
-        
-        <div id="error-container"></div>
-        
-        <div class="matches-grid" id="predictions">
-            <div class="loading">
-                Зареждане на прогнози<span class="spinner"></span>
-            </div>
+        <div id="loading" class="loading">
+            ⏳ Зареждане на прогнози...
         </div>
+        
+        <div id="error" style="display: none;" class="error"></div>
+        
+        <div class="predictions-grid" id="predictions"></div>
     </div>
     
     <script>
         let allPredictions = [];
         
-        document.addEventListener('DOMContentLoaded', () => {
-            const today = new Date();
-            const dateStr = today.toLocaleDateString('bg-BG', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric',
-                weekday: 'long'
-            });
-            document.getElementById('currentDate').textContent = dateStr;
-            loadPredictions();
-        });
-        
+        // Зареждане на прогнози
         async function loadPredictions() {
-            const limit = document.getElementById('maxResults').value;
-            const container = document.getElementById('predictions');
-            const errorContainer = document.getElementById('error-container');
-            
-            container.innerHTML = '<div class="loading">Зареждане на прогнози<span class="spinner"></span></div>';
-            errorContainer.innerHTML = '';
-            
             try {
-                const response = await fetch(`/api/top-predictions?min_probability=0&limit=${limit}`);
+                const response = await fetch('/api/predictions');
                 const data = await response.json();
                 
-                if (data.success) {
-                    allPredictions = data.predictions;
-                    updateLeagueFilter(data.predictions);
-                    applyFilters();
-                    updateStats(data);
-                } else {
-                    throw new Error(data.error);
+                if (!data.success) {
+                    throw new Error(data.error || 'Грешка при зареждане');
                 }
-            } catch (error) {
-                errorContainer.innerHTML = `<div style="color: #f87171; padding: 20px; text-align: center;">❌ Грешка: ${error.message}</div>`;
-                container.innerHTML = '<div class="no-data">Няма налични данни</div>';
-            }
-        }
-        
-        function updateLeagueFilter(predictions) {
-            const leagueFilter = document.getElementById('leagueFilter');
-            const leagues = [...new Set(predictions.map(p => p.league))].sort();
-            leagueFilter.innerHTML = '<option value="all">Всички лиги</option>' +
-                leagues.map(league => `<option value="${league}">${league}</option>`).join('');
-        }
-        
-        function applyFilters() {
-            const leagueFilter = document.getElementById('leagueFilter').value;
-            const lowOddsOnly = document.getElementById('lowOddsOnly').checked;
-            
-            let filtered = allPredictions;
-            
-            if (leagueFilter !== 'all') {
-                filtered = filtered.filter(p => p.league === leagueFilter);
-            }
-            
-            if (lowOddsOnly) {
-                filtered = filtered.filter(p => p.home_odds && p.home_odds < 1.40);
-            }
-            
-            displayPredictions(filtered);
-        }
-        
-        async function showAllMatches() {
-            const container = document.getElementById('predictions');
-            const errorContainer = document.getElementById('error-container');
-            
-            container.innerHTML = '<div class="loading">Зареждане<span class="spinner"></span></div>';
-            errorContainer.innerHTML = '';
-            
-            try {
-                const response = await fetch('/api/matches');
-                const data = await response.json();
                 
-                if (data.success) {
-                    allPredictions = data.predictions;
-                    updateLeagueFilter(data.predictions);
-                    applyFilters();
-                    updateStats(data);
-                }
+                allPredictions = data.predictions;
+                updateStats();
+                displayPredictions();
+                
+                document.getElementById('loading').style.display = 'none';
+                
             } catch (error) {
-                errorContainer.innerHTML = `<div style="color: #f87171; padding: 20px; text-align: center;">❌ Грешка: ${error.message}</div>`;
-                container.innerHTML = '<div class="no-data">Няма налични данни</div>';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = '❌ ' + error.message;
             }
         }
         
-        function displayPredictions(predictions) {
-            const container = document.getElementById('predictions');
+        // Статистики
+        function updateStats() {
+            const total = allPredictions.length;
+            const highConf = allPredictions.filter(p => p.prediction.confidence >= 60).length;
+            const avgConf = (allPredictions.reduce((sum, p) => sum + p.prediction.confidence, 0) / total) || 0;
             
-            if (predictions.length === 0) {
-                container.innerHTML = '<div class="no-data"><h3>📭 Няма мачове</h3><p>Опитайте различни филтри</p></div>';
+            document.getElementById('totalMatches').textContent = total;
+            document.getElementById('highConfidence').textContent = highConf;
+            document.getElementById('avgConfidence').textContent = avgConf.toFixed(1) + '%';
+        }
+        
+        // Показване на прогнози
+        function displayPredictions() {
+            const container = document.getElementById('predictions');
+            const confidenceFilter = document.getElementById('confidenceFilter').value;
+            const predictionFilter = document.getElementById('predictionFilter').value;
+            const goalsFilter = document.getElementById('goalsFilter').value;
+            
+            let filtered = allPredictions.filter(p => {
+                // Филтър увереност
+                if (confidenceFilter === 'high' && p.prediction.confidence < 60) return false;
+                if (confidenceFilter === 'medium' && (p.prediction.confidence < 45 || p.prediction.confidence >= 60)) return false;
+                if (confidenceFilter === 'low' && p.prediction.confidence >= 45) return false;
+                
+                // Филтър прогноза
+                if (predictionFilter !== 'all' && p.prediction.bet !== predictionFilter) return false;
+                
+                // Филтър голове
+                if (goalsFilter === 'high' && p.over_25 < 60) return false;
+                if (goalsFilter === 'low' && p.over_25 >= 60) return false;
+                
+                return true;
+            });
+            
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="loading">Няма мачове с избраните филтри</div>';
                 return;
             }
             
-            container.innerHTML = predictions.map((pred, index) => {
-                const maxProb = Math.max(pred.home_win_probability, pred.draw_probability, pred.away_win_probability);
-                const recClass = maxProb >= 50 ? 'high' : maxProb >= 40 ? 'medium' : 'low';
-                
-                const matchTime = new Date(pred.date).toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' });
-                const matchDate = new Date(pred.date).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' });
-                
-                return `
-                    <div class="match-card">
-                        <div class="match-header">
-                            <div class="league-badge">${pred.league}</div>
-                            <div class="match-time">📅 ${matchDate} | 🕐 ${matchTime}</div>
-                        </div>
-                        
-                        <div class="teams">
-                            <div class="team">${pred.home_team}</div>
-                            <div class="vs">VS</div>
-                            <div class="team">${pred.away_team}</div>
-                        </div>
-                        
-                        <div class="main-prediction">
-                            <div class="pred-item">
-                                <div class="pred-label">🏠 Домакин</div>
-                                <div class="pred-value home">${pred.home_odds}</div>
-                            </div>
-                            <div class="pred-item">
-                                <div class="pred-label">🤝 Равен</div>
-                                <div class="pred-value draw">${pred.draw_odds}</div>
-                            </div>
-                            <div class="pred-item">
-                                <div class="pred-label">✈️ Гост</div>
-                                <div class="pred-value away">${pred.away_odds}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="accordion">
-                            <div class="accordion-header" onclick="toggleAccordion(${index}, 'probs')">
-                                <span class="accordion-title">📊 Вероятности</span>
-                                <span class="accordion-arrow" id="arrow-probs-${index}">▼</span>
-                            </div>
-                            <div class="accordion-content" id="content-probs-${index}">
-                                <div class="accordion-grid">
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🏠 Домакин</div>
-                                        <div class="accordion-item-value" style="color: #22d3ee">${pred.home_win_probability}%</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🤝 Равен</div>
-                                        <div class="accordion-item-value" style="color: #fbbf24">${pred.draw_probability}%</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">✈️ Гост</div>
-                                        <div class="accordion-item-value" style="color: #fb7185">${pred.away_win_probability}%</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="accordion">
-                            <div class="accordion-header" onclick="toggleAccordion(${index}, 'goals')">
-                                <span class="accordion-title">⚽ Прогноза за Голове</span>
-                                <span class="accordion-arrow" id="arrow-goals-${index}">▼</span>
-                            </div>
-                            <div class="accordion-content" id="content-goals-${index}">
-                                <div class="accordion-grid">
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🔥 Над 2.5</div>
-                                        <div class="accordion-item-value" style="color: ${pred.over_2_5_goals >= 60 ? '#22d3ee' : '#fb7185'}">${pred.over_2_5_goals}%</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">⚡ 1во Полув.</div>
-                                        <div class="accordion-item-value" style="color: ${pred.first_half_goals >= 60 ? '#22d3ee' : '#fb7185'}">${pred.first_half_goals}%</div>
-                                    </div>
-                                    <div class="accordion-item">
-                                        <div class="accordion-item-label">🎲 BTTS</div>
-                                        <div class="accordion-item-value" style="color: ${pred.btts >= 55 ? '#22d3ee' : '#fb7185'}">${pred.btts}%</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="recommendation ${recClass}">
-                            ${pred.recommendation}
+            container.innerHTML = filtered.map(match => `
+                <div class="match-card">
+                    <div class="match-header">
+                        <div>
+                            <div class="match-time">🕐 ${match.time}</div>
+                            <div class="match-league">${match.league}</div>
                         </div>
                     </div>
-                `;
-            }).join('');
+                    
+                    <div class="teams">
+                        <div class="team-row">
+                            <span class="team-name">🏠 ${match.home_team}</span>
+                            <div class="form-badges">
+                                ${(match.home_form || '').split('').slice(0, 5).map(r => 
+                                    `<span class="form-badge ${r}">${r}</span>`
+                                ).join('')}
+                            </div>
+                            <span class="team-elo">ELO: ${match.home_elo}</span>
+                        </div>
+                        
+                        <div class="team-row">
+                            <span class="team-name">✈️ ${match.away_team}</span>
+                            <div class="form-badges">
+                                ${(match.away_form || '').split('').slice(0, 5).map(r => 
+                                    `<span class="form-badge ${r}">${r}</span>`
+                                ).join('')}
+                            </div>
+                            <span class="team-elo">ELO: ${match.away_elo}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="probabilities">
+                        <div class="prob-item ${match.prediction.bet === '1' ? 'highlight' : ''}">
+                            <div class="prob-label">Домакин</div>
+                            <div class="prob-value">${match.probabilities['1']}%</div>
+                        </div>
+                        <div class="prob-item ${match.prediction.bet === 'X' ? 'highlight' : ''}">
+                            <div class="prob-label">Равен</div>
+                            <div class="prob-value">${match.probabilities['X']}%</div>
+                        </div>
+                        <div class="prob-item ${match.prediction.bet === '2' ? 'highlight' : ''}">
+                            <div class="prob-label">Гост</div>
+                            <div class="prob-value">${match.probabilities['2']}%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="prediction-box">
+                        <div class="prediction-label">🎯 Препоръка</div>
+                        <div class="prediction-value">${getBetLabel(match.prediction.bet)}</div>
+                        <span class="confidence-badge">
+                            ${match.prediction.confidence}% увереност
+                        </span>
+                    </div>
+                    
+                    <div class="details">
+                        <div class="detail-row">
+                            <span>⚽ Очаквани голове:</span>
+                            <strong>${match.expected_goals}</strong>
+                        </div>
+                        <div class="detail-row">
+                            <span>📊 Over 2.5:</span>
+                            <strong>${match.over_25}%</strong>
+                        </div>
+                        <div class="detail-row">
+                            <span>📈 Домакин (avg):</span>
+                            <strong>${match.details.home_goals_avg} гола/мач</strong>
+                        </div>
+                        <div class="detail-row">
+                            <span>📈 Гост (avg):</span>
+                            <strong>${match.details.away_goals_avg} гола/мач</strong>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
         
-        function toggleAccordion(index, type) {
-            const content = document.getElementById(`content-${type}-${index}`);
-            const arrow = document.getElementById(`arrow-${type}-${index}`);
-            
-            content.classList.toggle('open');
-            arrow.classList.toggle('open');
+        function getBetLabel(bet) {
+            const labels = {
+                '1': '1 (Домакин)',
+                'X': 'X (Равен)',
+                '2': '2 (Гост)'
+            };
+            return labels[bet] || bet;
         }
         
-        function updateStats(data) {
-            const statsContainer = document.getElementById('stats');
-            const highConf = data.predictions.filter(p => p.home_win_probability >= 70).length;
-            const medConf = data.predictions.filter(p => p.home_win_probability >= 60 && p.home_win_probability < 70).length;
-            const avgProb = (data.predictions.reduce((sum, p) => sum + p.home_win_probability, 0) / data.predictions.length || 0).toFixed(1);
-            const over25 = data.predictions.filter(p => p.over_2_5_goals >= 60).length;
-            const firstHalf = data.predictions.filter(p => p.first_half_goals >= 60).length;
-            const btts = data.predictions.filter(p => p.btts >= 55).length;
-            
-            statsContainer.innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-value">${data.count}</div>
-                    <div class="stat-label">⚽ Мачове</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${highConf}</div>
-                    <div class="stat-label">🎯 Силни (≥70%)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${medConf}</div>
-                    <div class="stat-label">✅ Добри (60-69%)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${avgProb}%</div>
-                    <div class="stat-label">📊 Средно</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${over25}</div>
-                    <div class="stat-label">🔥 Над 2.5</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${firstHalf}</div>
-                    <div class="stat-label">⚡ 1во Пол.</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${btts}</div>
-                    <div class="stat-label">🎲 BTTS</div>
-                </div>
-            `;
-        }
+        // Филтри
+        document.getElementById('confidenceFilter').addEventListener('change', displayPredictions);
+        document.getElementById('predictionFilter').addEventListener('change', displayPredictions);
+        document.getElementById('goalsFilter').addEventListener('change', displayPredictions);
+        
+        // Старт
+        loadPredictions();
     </script>
 </body>
 </html>
