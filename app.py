@@ -13,26 +13,40 @@ from flask import Flask, render_template, jsonify, Response
 from datetime import datetime, timedelta
 import logging
 from functools import wraps
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from predictor import SmartPredictor
 from utils import export_predictions_to_csv, get_high_confidence_predictions
+from database import get_database, DatabaseManager
 from dotenv import load_dotenv
 
 # Зареждане на .env
 load_dotenv()
 
-# Logging конфигурация
+# Logging конфигурация (безопасно за Windows конзола)
+class _StripNonAsciiFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+            # Премахва символи извън ASCII за избягване на UnicodeEncodeError в конзолата
+            safe = msg.encode('ascii', 'ignore').decode('ascii')
+            # Запазва оригиналния текст за файловия лог
+            record.msg = safe if record.args == () else safe % record.args
+        except Exception:
+            pass
+        return True
+
+file_handler = logging.FileHandler('logs/app.log', encoding='utf-8')
+stream_handler = logging.StreamHandler()
+stream_handler.addFilter(_StripNonAsciiFilter())
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/app.log'),
-        logging.StreamHandler()
-    ]
+    handlers=[file_handler, stream_handler]
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='templates', static_url_path='/templates')
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
@@ -50,6 +64,24 @@ if not API_KEY:
     
 predictor = SmartPredictor(api_key=API_KEY)
 
+# Инициализиране на базата данни
+db: Optional[DatabaseManager] = None
+
+def init_database() -> bool:
+    """Инициализира връзката към базата данни"""
+    global db
+    try:
+        db = get_database()
+        if db and db.connection and db.connection.is_connected():
+            logger.info("✅ Базата данни инициализирана успешно")
+            return True
+        else:
+            logger.warning("⚠️  Не може да се свърже към базата данни")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Грешка при инициализиране на базата: {e}")
+        return False
+
 def _is_cache_valid() -> bool:
     """Проверява дали кешът е все още валиден"""
     if _predictions_cache['data'] is None or _predictions_cache['timestamp'] is None:
@@ -64,11 +96,97 @@ def _get_cached_predictions() -> List[Dict[str, Any]]:
         return _predictions_cache['data']
     return []
 
+def _save_predictions_to_db(predictions: List[Dict[str, Any]]) -> int:
+    """Запазва прогнозите в базата данни"""
+    saved_count = 0
+    if not db:
+        return 0
+    
+    try:
+        for pred in predictions:
+            try:
+                # Добавяне на отбори ако не съществуват
+                home_team_id = db.add_team(
+                    api_id=pred.get('home_team_id', 0),
+                    name=pred.get('home_team', 'Unknown'),
+                    league=pred.get('league', 'Unknown')
+                )
+                away_team_id = db.add_team(
+                    api_id=pred.get('away_team_id', 0),
+                    name=pred.get('away_team', 'Unknown'),
+                    league=pred.get('league', 'Unknown')
+                )
+                
+                if not home_team_id or not away_team_id:
+                    continue
+                
+                # Добавяне на мач
+                try:
+                    match_time = datetime.fromisoformat(pred.get('time', datetime.now().isoformat()))
+                except:
+                    match_time = datetime.now()
+                
+                match_id = db.add_match(
+                    api_id=pred.get('match_id', 0),
+                    home_team_id=home_team_id,
+                    away_team_id=away_team_id,
+                    match_date=match_time,
+                    league=pred.get('league', 'Unknown'),
+                    status='pending'
+                )
+                
+                if not match_id:
+                    continue
+                
+                # Запазване на прогноза
+                probs = pred.get('probabilities', {})
+                pred_data = pred.get('prediction', {})
+                
+                prediction_id = db.save_prediction(
+                    match_id=match_id,
+                    home_team_id=home_team_id,
+                    away_team_id=away_team_id,
+                    home_elo=float(pred.get('home_elo', 1500)),
+                    away_elo=float(pred.get('away_elo', 1500)),
+                    probability_home=float(probs.get('1', 0)),
+                    probability_draw=float(probs.get('X', 0)),
+                    probability_away=float(probs.get('2', 0)),
+                    prediction_bet=pred_data.get('bet', ''),
+                    confidence=int(pred_data.get('confidence', 0)),
+                    expected_goals=float(pred.get('expected_goals', 0)),
+                    over_25_probability=float(pred.get('over_25', 0)),
+                    home_form=pred.get('home_form', ''),
+                    away_form=pred.get('away_form', ''),
+                    home_avg_goals_for=float(pred.get('home_avg_goals_for', 0)),
+                    home_avg_goals_against=float(pred.get('home_avg_goals_against', 0)),
+                    away_avg_goals_for=float(pred.get('away_avg_goals_for', 0)),
+                    away_avg_goals_against=float(pred.get('away_avg_goals_against', 0)),
+                    match_date=match_time
+                )
+                
+                if prediction_id:
+                    saved_count += 1
+                    logger.debug(f"✅ Прогноза съхранена: {pred.get('home_team')} vs {pred.get('away_team')}")
+            except Exception as e:
+                logger.warning(f"⚠️  Грешка при запис на прогноза: {e}")
+                continue
+        
+        if saved_count > 0:
+            logger.info(f"✅ Запазени {saved_count} прогнози в базата данни")
+    except Exception as e:
+        logger.error(f"❌ Грешка при запис на прогнози: {e}")
+    
+    return saved_count
+
 def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
     """Актуализира кеша на прогнозите"""
     _predictions_cache['data'] = predictions
     _predictions_cache['timestamp'] = datetime.now()
     logger.info(f"💾 Кеш актуализиран с {len(predictions)} прогнози")
+    
+    # Запис на прогнозите в базата данни
+    if db and predictions:
+        _save_predictions_to_db(predictions)
 
 @app.route('/')
 def index() -> str:
@@ -240,6 +358,77 @@ def get_high_confidence() -> tuple[Response, int]:
         logger.error(f"Грешка при филтриране: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/accuracy')
+def get_accuracy() -> tuple[Response, int]:
+    """
+    Връща точност на прогнозите за последния период
+    
+    Returns:
+        JSON response със статистики за точност
+    """
+    try:
+        if not db:
+            return jsonify({
+                'success': False,
+                'error': 'База данни не е инициализирана'
+            }), 503
+        
+        # Точност за последния месец
+        accuracy_30 = db.get_prediction_accuracy(days=30)
+        # Точност за последната седмица
+        accuracy_7 = db.get_prediction_accuracy(days=7)
+        # Точност за последния ден
+        accuracy_1 = db.get_prediction_accuracy(days=1)
+        
+        return jsonify({
+            'success': True,
+            'accuracy': {
+                'last_30_days': accuracy_30,
+                'last_7_days': accuracy_7,
+                'last_24_hours': accuracy_1
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Грешка при получаване на точност: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/database/stats')
+def get_database_stats() -> tuple[Response, int]:
+    """
+    Връща статистики за базата данни
+    
+    Returns:
+        JSON response със статистики за съхранено
+    """
+    try:
+        if not db or not db.connection or not db.connection.is_connected():
+            return jsonify({
+                'success': False,
+                'error': 'База данни не е свързана',
+                'status': 'disconnected'
+            }), 503
+        
+        # Получи броя на записите в各и таблица
+        cursor = db.connection.cursor()
+        
+        stats = {}
+        for table in ['teams', 'matches', 'predictions', 'team_statistics']:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            count = cursor.fetchone()[0]
+            stats[table] = count
+        
+        return jsonify({
+            'success': True,
+            'status': 'connected',
+            'database': 'football_predictor',
+            'statistics': stats
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Грешка при получаване на статистики за базата: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.errorhandler(500)
 def internal_error(error: Any) -> tuple[Response, int]:
     """Обработка на 500 грешки"""
@@ -253,6 +442,12 @@ if __name__ == '__main__':
     logger.info("🚀 Стартиране на Smart Football Predictor")
     logger.info(f"📍 Сървър: http://0.0.0.0:5000")
     logger.info(f"🔑 API конфигурирано: {bool(API_KEY)}")
+    
+    # Инициализирање на базата данни
+    if init_database():
+        logger.info("✅ База данни инициализирана")
+    else:
+        logger.warning("⚠️  База данни не е инициализирана - някои функции няма да работят")
     
     app.run(
         debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true',
