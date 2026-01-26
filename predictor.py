@@ -41,6 +41,31 @@ class SmartPredictor:
     API_TIMEOUT: int = 10
     MAX_RETRIES: int = 3
     
+    # Топ лиги (ID-та от API-Football)
+    TOP_LEAGUES = {
+        39,    # Premier League (England)
+        40,    # Championship (England)
+        140,   # La Liga (Spain)
+        61,    # Ligue 1 (France)
+        78,    # Bundesliga (Germany)
+        135,   # Serie A (Italy)
+        2,     # Champions League
+        3,     # Europa League
+        848,   # Conference League
+        88,    # Eredivisie (Netherlands)
+        94,    # Primeira Liga (Portugal)
+        203,   # Super Lig (Turkey)
+        262,   # Liga MX (Mexico)
+        71,    # Serie A (Brazil)
+        307,   # Pro League (Saudi Arabia)
+        253,   # MLS (USA)
+        128,   # Liga Argentina
+        283,   # Brasileirão
+        141,   # La Liga 2 (Spain)
+        136,   # Serie B (Italy)
+        79,    # Bundesliga 2 (Germany)
+    }
+    
     def __init__(self, api_key: str) -> None:
         """
         Инициализация на прогнозатора
@@ -309,11 +334,31 @@ class SmartPredictor:
             logger.warning("⚠️  Няма мачове за днес")
             return []
         
-        # Ограничаване на 20 мача
+        # Сортиране с приоритет на топ лиги
         all_fixtures = fixtures_data['response']
-        fixtures = all_fixtures[:self.MAX_FIXTURES]
         
-        logger.info(f"📋 Намерени {len(all_fixtures)} мача, анализиране на първите {len(fixtures)}")
+        # Разделяне на мачове от топ лиги и останали
+        top_league_fixtures = [
+            fixture for fixture in all_fixtures 
+            if fixture['league']['id'] in self.TOP_LEAGUES
+        ]
+        other_fixtures = [
+            fixture for fixture in all_fixtures 
+            if fixture['league']['id'] not in self.TOP_LEAGUES
+        ]
+        
+        # Комбиниране: първо топ лиги, после останалите
+        fixtures = (top_league_fixtures + other_fixtures)[:self.MAX_FIXTURES]
+        
+        # Логиране на мачовете от топ лиги
+        if top_league_fixtures:
+            top_matches = ', '.join([
+                f"{fixture['teams']['home']['name']} vs {fixture['teams']['away']['name']}" 
+                for fixture in top_league_fixtures[:5]
+            ])
+            logger.info(f"🏆 Топ лиги мачове: {top_matches}")
+        
+        logger.info(f"📋 Намерени {len(all_fixtures)} мача ({len(top_league_fixtures)} от топ лиги), анализиране на {len(fixtures)}")
         
         predictions = []
         
