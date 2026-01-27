@@ -17,6 +17,7 @@ import requests
 from datetime import datetime
 import logging
 import time
+import json
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 from requests.adapters import HTTPAdapter
@@ -214,7 +215,7 @@ class SmartPredictor:
             logger.error(f"❌ Грешка при изчисляване на форма: {e}")
             return 1.5
     
-    def _calculate_expected_yellow_cards(self, stats: Dict[str, any], team_id: Optional[int] = None) -> float:
+    def _calculate_expected_yellow_cards(self, stats: Dict[str, any], team_id: Optional[int] = None, league_id: Optional[int] = None) -> float:
         """
         Изчислява очаквани жълти картони на базата на статистики
         
@@ -225,6 +226,14 @@ class SmartPredictor:
             Очаквани жълти картони (среден брой)
         """
         try:
+            # Първо приоритет: Статистика от последните 5 мача
+            if team_id:
+                recent_cards, _ = self._fetch_recent_cards_corners(team_id)
+                if recent_cards is not None:
+                    logger.debug(f"📊 Използвам картони от последни 5 мача: {recent_cards}")
+                    return recent_cards
+            
+            # Второ: Сезонни статистики от API
             # Проверка на структурата на API отговора
             if not isinstance(stats, dict):
                 logger.debug("❌ Stats е не е dict, използвам дефолт")
@@ -261,12 +270,11 @@ class SmartPredictor:
                     elif isinstance(yellow, (int, float)):
                         return float(yellow)
             
-            # Ако няма данни, пробвай fallback от последни мачове
-            if team_id:
-                recent_cards, _ = self._fetch_recent_cards_corners(team_id)
-                if recent_cards is not None:
-                    logger.debug(f"↩️ Използвам fallback картони от последни мачове: {recent_cards}")
-                    return recent_cards
+            # Ако няма данни от сезонни статистики, използвай лигови средни
+            if league_id:
+                league_cards, _ = self._get_league_averages(league_id)
+                logger.debug(f"🏆 Използвам лигови средни картони: {league_cards}")
+                return league_cards
 
             logger.debug("⚠️  Cards данни липсват, използвам дефолт 1.8")
             return 1.8
@@ -274,7 +282,7 @@ class SmartPredictor:
             logger.error(f"❌ Грешка при изчисляване на очаквани картони: {e}")
             return 1.8
     
-    def _calculate_expected_corners(self, stats: Dict[str, any], team_id: Optional[int] = None) -> float:
+    def _calculate_expected_corners(self, stats: Dict[str, any], team_id: Optional[int] = None, league_id: Optional[int] = None) -> float:
         """
         Изчислява очаквани корнери на базата на статистики
         
@@ -285,6 +293,14 @@ class SmartPredictor:
             Очаквани корнери (среден брой)
         """
         try:
+            # Първо приоритет: Статистика от последните 5 мача
+            if team_id:
+                _, recent_corners = self._fetch_recent_cards_corners(team_id)
+                if recent_corners is not None:
+                    logger.debug(f"📊 Използвам корнери от последни 5 мача: {recent_corners}")
+                    return recent_corners
+            
+            # Второ: Сезонни статистики от API
             # Проверка на структурата на API отговора
             if not isinstance(stats, dict):
                 logger.debug("❌ Stats не е dict, използвам дефолт")
@@ -321,12 +337,11 @@ class SmartPredictor:
                 elif isinstance(corners, (int, float)):
                     return float(corners)
             
-            # Ако няма данни, пробвай fallback от последни мачове
-            if team_id:
-                _, recent_corners = self._fetch_recent_cards_corners(team_id)
-                if recent_corners is not None:
-                    logger.debug(f"↩️ Използвам fallback корнери от последни мачове: {recent_corners}")
-                    return recent_corners
+            # Ако няма данни от сезонни статистики, използвай лигови средни
+            if league_id:
+                _, league_corners = self._get_league_averages(league_id)
+                logger.debug(f"🏆 Използвам лигови средни корнери: {league_corners}")
+                return league_corners
 
             logger.debug("⚠️  Corners данни липсват, използвам дефолт 4.2")
             return 4.2
@@ -408,7 +423,84 @@ class SmartPredictor:
             logger.error(f"❌ Грешка при fallback за последни мачове: {e}")
             return None, None
     
-    def _analyze_match(self, fixture: Dict[str, any], home_stats: Dict[str, any], away_stats: Dict[str, any]) -> Dict[str, any]:
+    def _get_league_averages(self, league_id: int, season: int = 2024) -> Tuple[float, float]:
+        """
+        Връща средни стойности за картони и корнери за лигата
+        
+        Args:
+            league_id: ID на лигата
+            season: Сезон
+            
+        Returns:
+            Tuple (avg_cards, avg_corners)
+        """
+        try:
+            # Кеш за лиги за да не правим много заявки
+            if not hasattr(self, '_league_cache'):
+                self._league_cache = {}
+            
+            cache_key = f"{league_id}_{season}"
+            if cache_key in self._league_cache:
+                return self._league_cache[cache_key]
+            
+            # Взимаме статистики за лигата
+            league_stats = self._request('leagues/statistics', {
+                'league': league_id,
+                'season': season
+            })
+            
+            if league_stats and league_stats.get('response'):
+                response = league_stats['response']
+                
+                # Търсим средни стойности за картони и корнери
+                avg_cards = 1.8  # дефолт
+                avg_corners = 4.2  # дефолт
+                
+                if isinstance(response, dict) and 'statistics' in response:
+                    stats = response['statistics']
+                    if isinstance(stats, list):
+                        for stat_group in stats:
+                            if isinstance(stat_group, dict):
+                                group = stat_group.get('group', {})
+                                if isinstance(group, dict):
+                                    group_name = group.get('name', '')
+                                    
+                                    if group_name == 'cards':
+                                        stat_list = stat_group.get('statistics', [])
+                                        for stat in stat_list:
+                                            if isinstance(stat, dict) and stat.get('type') == 'Yellow Cards':
+                                                value = stat.get('value')
+                                                if value is not None:
+                                                    try:
+                                                        avg_cards = float(value)
+                                                    except (ValueError, TypeError):
+                                                        pass
+                                    
+                                    elif group_name == 'corners':
+                                        stat_list = stat_group.get('statistics', [])
+                                        for stat in stat_list:
+                                            if isinstance(stat, dict):
+                                                for key in ['total', 'value', 'count']:
+                                                    value = stat.get(key)
+                                                    if value is not None:
+                                                        try:
+                                                            avg_corners = float(value)
+                                                        except (ValueError, TypeError):
+                                                            pass
+                
+                result = (avg_cards, avg_corners)
+                self._league_cache[cache_key] = result
+                return result
+            
+            # Ако няма данни, връщаме дефолтни стойности базирани на типа лига
+            if league_id in self.TOP_LEAGUES:
+                return (2.2, 5.5)  # По-високи стойности за топ лиги
+            else:
+                return (1.6, 3.8)  # По-ниски за по-малки лиги
+                
+        except Exception as e:
+            logger.error(f"❌ Грешка при взимане на лигови средни за {league_id}: {e}")
+            return (1.8, 4.2)  # Абсолютен дефолт
         """
         Анализира един мач и генерира прогноза
         
@@ -520,7 +612,8 @@ class SmartPredictor:
                     'away_corners_avg': round(away_corners, 2),
                     'home_form_score': round(home_form_score, 2),
                     'away_form_score': round(away_form_score, 2)
-                }
+                },
+                'is_top_league': fixture['league']['id'] in self.TOP_LEAGUES
             }
         except Exception as e:
             logger.error(f"❌ Грешка при анализ на мач {home_team} vs {away_team}: {e}")
@@ -610,30 +703,77 @@ class SmartPredictor:
                 
                 if home_stats_data and home_stats_data.get('response'):
                     resp = home_stats_data['response']
+                    logger.info(f"🏠 {fixture['teams']['home']['name']} - пълен API отговор: {json.dumps(resp, indent=2, ensure_ascii=False)[:1000]}...")
                     logger.debug(f"🏠 {fixture['teams']['home']['name']} статистики ключове: {list(resp.keys())}")
                     
-                    goals_avg = resp.get('goals', {}).get('for', {}).get('average', {}).get('total', 1.5)
-                    yellow_cards_avg = self._calculate_expected_yellow_cards(resp, team_id=home_id)
-                    corners_avg = self._calculate_expected_corners(resp, team_id=home_id)
+                    # Извличане на голове
+                    goals_for = resp.get('goals', {}).get('for', {})
+                    goals_avg = goals_for.get('average', {}).get('total')
+                    if goals_avg is None:
+                        goals_avg = goals_for.get('total')
+                    goals_avg = float(goals_avg) if goals_avg else 1.5
+                    
+                    # Извличане на форма
+                    form = resp.get('form', '')
+                    
+                    # Извличане на картони и корнери
+                    yellow_cards_avg = self._calculate_expected_yellow_cards(resp, team_id=home_id, league_id=league_id)
+                    corners_avg = self._calculate_expected_corners(resp, team_id=home_id, league_id=league_id)
+                    
+                    logger.info(f"🏠 {fixture['teams']['home']['name']} - голове: {goals_avg}, форма: '{form}', картони: {yellow_cards_avg}, корнери: {corners_avg}")
+                    
                     home_stats = {
-                        'form': resp.get('form', ''),
-                        'goals_avg': float(goals_avg) if goals_avg else 1.5,
+                        'form': form,
+                        'goals_avg': goals_avg,
                         'yellow_cards_avg': yellow_cards_avg,
                         'corners_avg': corners_avg
                     }
                 
                 if away_stats_data and away_stats_data.get('response'):
                     resp = away_stats_data['response']
+                    logger.info(f"✈️  {fixture['teams']['away']['name']} - пълен API отговор: {json.dumps(resp, indent=2, ensure_ascii=False)[:1000]}...")
                     logger.debug(f"✈️  {fixture['teams']['away']['name']} статистики ключове: {list(resp.keys())}")
                     
-                    goals_avg = resp.get('goals', {}).get('for', {}).get('average', {}).get('total', 1.5)
-                    yellow_cards_avg = self._calculate_expected_yellow_cards(resp, team_id=away_id)
-                    corners_avg = self._calculate_expected_corners(resp, team_id=away_id)
+                    # Извличане на голове
+                    goals_for = resp.get('goals', {}).get('for', {})
+                    goals_avg = goals_for.get('average', {}).get('total')
+                    if goals_avg is None:
+                        goals_avg = goals_for.get('total')
+                    goals_avg = float(goals_avg) if goals_avg else 1.5
+                    
+                    # Извличане на форма
+                    form = resp.get('form', '')
+                    
+                    # Извличане на картони и корнери
+                    yellow_cards_avg = self._calculate_expected_yellow_cards(resp, team_id=away_id, league_id=league_id)
+                    corners_avg = self._calculate_expected_corners(resp, team_id=away_id, league_id=league_id)
+                    
+                    logger.info(f"✈️  {fixture['teams']['away']['name']} - голове: {goals_avg}, форма: '{form}', картони: {yellow_cards_avg}, корнери: {corners_avg}")
+                    
                     away_stats = {
-                        'form': resp.get('form', ''),
-                        'goals_avg': float(goals_avg) if goals_avg else 1.5,
+                        'form': form,
+                        'goals_avg': goals_avg,
                         'yellow_cards_avg': yellow_cards_avg,
                         'corners_avg': corners_avg
+                    }
+                
+                # Ако няма статистики, използвай лигови средни като дефолт
+                if not home_stats:
+                    league_cards, league_corners = self._get_league_averages(league_id)
+                    home_stats = {
+                        'form': '',
+                        'goals_avg': 1.5,
+                        'yellow_cards_avg': league_cards,
+                        'corners_avg': league_corners
+                    }
+                
+                if not away_stats:
+                    league_cards, league_corners = self._get_league_averages(league_id)
+                    away_stats = {
+                        'form': '',
+                        'goals_avg': 1.5,
+                        'yellow_cards_avg': league_cards,
+                        'corners_avg': league_corners
                     }
                 
                 # Анализ
@@ -646,8 +786,8 @@ class SmartPredictor:
                 logger.error(f"❌ Грешка при анализ на мач: {e}")
                 continue
         
-        # Сортиране по време
-        predictions.sort(key=lambda x: x['time'])
+        # Сортиране: първо топ лиги, после по време
+        predictions.sort(key=lambda x: (not x['is_top_league'], x['time']))
         
         logger.info(f"🎯 Завършени {len(predictions)} прогнози")
         return predictions

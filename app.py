@@ -12,6 +12,7 @@ import os
 from flask import Flask, render_template, jsonify, Response
 from datetime import datetime, timedelta
 import logging
+import json
 from functools import wraps
 from typing import Dict, Any, List, Optional
 from predictor import SmartPredictor
@@ -52,7 +53,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='templates', static_url_path='/templates')
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
@@ -60,8 +61,10 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 _predictions_cache: Dict[str, Any] = {
     'data': None,
     'timestamp': None,
-    'cache_duration': 3600  # 1 час
+    'cache_duration': 86400  # 24 часа
 }
+
+CACHE_FILE = 'cache/predictions_cache.json'
 
 # Инициализация
 if not API_KEY:
@@ -93,6 +96,27 @@ def init_database() -> bool:
         db = None
         return False
 
+# Зареждане на кеш от файл
+def _load_cache_from_file():
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+                timestamp_str = cache_data.get('timestamp')
+                if timestamp_str:
+                    timestamp = datetime.fromisoformat(timestamp_str)
+                    # Проверка дали е от днес
+                    if timestamp.date() == datetime.now().date():
+                        _predictions_cache['data'] = cache_data.get('data', [])
+                        _predictions_cache['timestamp'] = timestamp
+                        logger.info("💾 Зареден кеш от файл")
+                    else:
+                        logger.info("🗑️  Кешът е от стар ден, изтриване")
+    except Exception as e:
+        logger.error(f"❌ Грешка при зареждане на кеш: {e}")
+
+_load_cache_from_file()
+
 def _is_cache_valid() -> bool:
     """Проверява дали кешът е все още валиден"""
     if _predictions_cache['data'] is None or _predictions_cache['timestamp'] is None:
@@ -101,9 +125,27 @@ def _is_cache_valid() -> bool:
     return elapsed < _predictions_cache['cache_duration']
 
 def _get_cached_predictions() -> List[Dict[str, Any]]:
-    """Връща кеширани прогнози или праз списък"""
+    """Връща кеширани прогнози от базата или праз списък"""
+    today = datetime.now().strftime('%Y-%m-%d')
+    if db:
+        try:
+            cursor = db.connection.cursor()
+            cursor.execute("SELECT predictions FROM predictions_cache WHERE date = %s", (today,))
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                predictions = json.loads(result[0])
+                logger.info(f"💾 Заредени {len(predictions)} прогнози от базата за {today}")
+                # Зареди в in-memory cache
+                _predictions_cache['data'] = predictions
+                _predictions_cache['timestamp'] = datetime.now()
+                return predictions
+        except Exception as e:
+            logger.error(f"❌ Грешка при четене от кеша: {e}")
+    
+    # Fallback to in-memory cache
     if _is_cache_valid():
-        logger.info("💾 Използвам кеширани прогнози")
+        logger.info("💾 Използвам in-memory кеширани прогнози")
         return _predictions_cache['data']
     return []
 
@@ -200,6 +242,34 @@ def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
     _predictions_cache['data'] = predictions
     _predictions_cache['timestamp'] = datetime.now()
     logger.info(f"💾 Кеш актуализиран с {len(predictions)} прогнози")
+    
+    # Запис в базата данни за деня
+    if db and predictions:
+        today = datetime.now().strftime('%Y-%m-%d')
+        try:
+            cursor = db.connection.cursor()
+            cursor.execute(
+                "INSERT INTO predictions_cache (date, predictions) VALUES (%s, %s) ON DUPLICATE KEY UPDATE predictions = %s",
+                (today, json.dumps(predictions), json.dumps(predictions))
+            )
+            db.connection.commit()
+            cursor.close()
+            logger.info(f"💾 Прогнози записани в базата за {today}")
+        except Exception as e:
+            logger.error(f"❌ Грешка при запис в predictions_cache: {e}")
+    
+    # Запис в файл
+    try:
+        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+        cache_data = {
+            'data': predictions,
+            'timestamp': _predictions_cache['timestamp'].isoformat()
+        }
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        logger.info("💾 Кеш записан във файл")
+    except Exception as e:
+        logger.error(f"❌ Грешка при запис на кеш във файл: {e}")
     
     # Запис на прогнозите в базата данни
     if db and predictions:

@@ -153,6 +153,19 @@ class DatabaseManager:
                     cursor.close()
                     logger.info(f"✅ Добавени нови колони: {', '.join(alter_sql_parts)}")
             
+            # Създаване на таблица за кеш на прогнози
+            cursor = self.connection.cursor()
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS predictions_cache (
+                date DATE PRIMARY KEY,
+                predictions JSON NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            self.connection.commit()
+            cursor.close()
+            logger.info("✅ Създадена таблица predictions_cache")
+            
             cursor.close()
         except Exception as e:
             logger.error(f"❌ Грешка при актуализация на схема: {e}")
