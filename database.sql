@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS predictions (
     confidence INT COMMENT 'Увереност 0-100%',
     expected_goals DECIMAL(5,2),
     over_25_probability DECIMAL(5,2),
+    expected_yellow_cards DECIMAL(5,2) COMMENT 'Очаквани жълти картони',
+    expected_corners DECIMAL(5,2) COMMENT 'Очаквани корнери',
     
     -- Форма
     home_form VARCHAR(10) COMMENT 'Последни 5 мача - WDWDL',

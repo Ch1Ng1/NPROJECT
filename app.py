@@ -22,6 +22,12 @@ from dotenv import load_dotenv
 # Зареждане на .env
 load_dotenv()
 
+# Валидация на API ключ
+API_KEY = os.getenv('API_FOOTBALL_KEY')
+if not API_KEY:
+    print("⚠️  ВНИМАНИЕ: API_FOOTBALL_KEY не е задан в .env файла")
+    print("Някои функции няма да работят. Настрой го в .env файла.")
+
 # Logging конфигурация (безопасно за Windows конзола)
 class _StripNonAsciiFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -40,7 +46,7 @@ stream_handler = logging.StreamHandler()
 stream_handler.addFilter(_StripNonAsciiFilter())
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[file_handler, stream_handler]
 )
@@ -58,11 +64,14 @@ _predictions_cache: Dict[str, Any] = {
 }
 
 # Инициализация
-API_KEY = os.getenv('API_FOOTBALL_KEY', '')
 if not API_KEY:
     logger.warning("⚠️  API ключ не е конфигуриран. Продължаване без API функционалност.")
     
-predictor = SmartPredictor(api_key=API_KEY)
+try:
+    predictor = SmartPredictor(api_key=API_KEY) if API_KEY else None
+except Exception as e:
+    logger.error(f"❌ Грешка при инициализация на predictor: {e}")
+    predictor = None
 
 # Инициализиране на базата данни
 db: Optional[DatabaseManager] = None
@@ -77,9 +86,11 @@ def init_database() -> bool:
             return True
         else:
             logger.warning("⚠️  Не може да се свърже към базата данни")
+            db = None
             return False
     except Exception as e:
         logger.error(f"❌ Грешка при инициализиране на базата: {e}")
+        db = None
         return False
 
 def _is_cache_valid() -> bool:
@@ -142,6 +153,10 @@ def _save_predictions_to_db(predictions: List[Dict[str, Any]]) -> int:
                 probs = pred.get('probabilities', {})
                 pred_data = pred.get('prediction', {})
                 
+                # Валидация на данни преди запис
+                home_form = str(pred.get('home_form', ''))[:50]  # Лимит 50 символа
+                away_form = str(pred.get('away_form', ''))[:50]
+                
                 prediction_id = db.save_prediction(
                     match_id=match_id,
                     home_team_id=home_team_id,
@@ -151,12 +166,14 @@ def _save_predictions_to_db(predictions: List[Dict[str, Any]]) -> int:
                     probability_home=float(probs.get('1', 0)),
                     probability_draw=float(probs.get('X', 0)),
                     probability_away=float(probs.get('2', 0)),
-                    prediction_bet=pred_data.get('bet', ''),
+                    prediction_bet=str(pred_data.get('bet', ''))[:10],
                     confidence=int(pred_data.get('confidence', 0)),
                     expected_goals=float(pred.get('expected_goals', 0)),
                     over_25_probability=float(pred.get('over_25', 0)),
-                    home_form=pred.get('home_form', ''),
-                    away_form=pred.get('away_form', ''),
+                    expected_yellow_cards=float(pred.get('expected_yellow_cards', 3.6)),
+                    expected_corners=float(pred.get('expected_corners', 8.4)),
+                    home_form=home_form,
+                    away_form=away_form,
                     home_avg_goals_for=float(pred.get('home_avg_goals_for', 0)),
                     home_avg_goals_against=float(pred.get('home_avg_goals_against', 0)),
                     away_avg_goals_for=float(pred.get('away_avg_goals_for', 0)),
@@ -194,7 +211,7 @@ def index() -> str:
     try:
         return render_template('index.html')
     except Exception as e:
-        logger.error(f"Грешка при зареждане на главна страница: {e}")
+        logger.error(f"❌ Грешка при зареждане на главна страница: {e}")
         return "Грешка при зареждане на страницата", 500
 
 @app.route('/api/predictions')
@@ -213,6 +230,13 @@ def get_predictions() -> tuple[Response, int]:
                 'error': 'API ключ не е конфигуриран. Настрой API_FOOTBALL_KEY в .env файла.'
             }), 400
         
+        # Проверяване на predictor
+        if not predictor:
+            return jsonify({
+                'success': False,
+                'error': 'Прогнозаторът не е инициализиран. Проверете логовете.'
+            }), 500
+        
         # Използвай кеширани прогнози ако са валидни
         cached = _get_cached_predictions()
         if cached:
@@ -227,6 +251,14 @@ def get_predictions() -> tuple[Response, int]:
         logger.info("📊 Генериране на нови прогнози...")
         predictions = predictor.get_today_predictions()
         
+        if not predictions:
+            logger.warning("⚠️  Няма прогнози за днес")
+            return jsonify({
+                'success': False,
+                'error': 'Няма достъпни мачове за прогноза днес',
+                'total': 0
+            }), 200
+        
         # Кеширане на резултата
         _update_predictions_cache(predictions)
         
@@ -238,13 +270,13 @@ def get_predictions() -> tuple[Response, int]:
         }), 200
         
     except ValueError as e:
-        logger.error(f"Валидационна грешка: {e}")
+        logger.error(f"❌ Валидационна грешка: {e}")
         return jsonify({
             'success': False,
             'error': f'Валидационна грешка: {str(e)}'
         }), 400
     except Exception as e:
-        logger.error(f"Критична грешка при генериране на прогнози: {e}", exc_info=True)
+        logger.error(f"❌ Критична грешка при генериране на прогнози: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': 'Грешка при генериране на прогнози. Опитай отново по-късно.'
@@ -449,8 +481,18 @@ if __name__ == '__main__':
     else:
         logger.warning("⚠️  База данни не е инициализирана - някои функции няма да работят")
     
-    app.run(
-        debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true',
-        host=os.getenv('HOST', '0.0.0.0'),
-        port=int(os.getenv('PORT', 5000))
-    )
+    try:
+        app.run(
+            debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true',
+            host=os.getenv('HOST', '0.0.0.0'),
+            port=int(os.getenv('PORT', 5000)),
+            use_reloader=False
+        )
+    except KeyboardInterrupt:
+        logger.info("\n🛑 Спиране на приложението по инструкция...")
+        if db and db.connection:
+            db.close()
+    except Exception as e:
+        logger.error(f"❌ Критична грешка: {e}")
+        if db and db.connection:
+            db.close()

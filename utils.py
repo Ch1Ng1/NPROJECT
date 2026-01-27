@@ -37,6 +37,7 @@ def export_predictions_to_csv(predictions: List[Dict[str, Any]]) -> str:
             'Вероятност 1', 'Вероятност X', 'Вероятност 2',
             'Препоръка', 'Увереност',
             'Over 2.5', 'Очаквани голове',
+            'Очаквани картони', 'Очаквани корнери',
             'Домакин форма', 'Гост форма'
         ]
         
@@ -58,6 +59,8 @@ def export_predictions_to_csv(predictions: List[Dict[str, Any]]) -> str:
                 'Увереност': f"{pred['prediction']['confidence']}%",
                 'Over 2.5': f"{pred['over_25']}%",
                 'Очаквани голове': pred['expected_goals'],
+                'Очаквани картони': pred.get('expected_yellow_cards', 0),
+                'Очаквани корнери': pred.get('expected_corners', 0),
                 'Домакин форма': pred['home_form'],
                 'Гост форма': pred['away_form']
             })

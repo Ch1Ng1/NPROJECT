@@ -82,18 +82,18 @@ function setCachedPredictions(predictions) {
 async function loadPredictions() {
     try {
         // Проверка за кеш
-        const cached = getCachedPredictions();
-        if (cached) {
-            console.log('📦 Използвам кеширани прогнози');
-            allPredictions = cached;
-            updateStats();
-            displayPredictions();
-            document.getElementById('loading').style.display = 'none';
-            
-            // Показване на съобщение за кеш
-            showCacheInfo();
-            return;
-        }
+        // const cached = getCachedPredictions();
+        // if (cached) {
+        //     console.log('📦 Използвам кеширани прогнози');
+        //     allPredictions = cached;
+        //     updateStats();
+        //     displayPredictions();
+        //     document.getElementById('loading').style.display = 'none';
+        //     
+        //     // Показване на съобщение за кеш
+        //     showCacheInfo();
+        //     return;
+        // }
         
         // Зареждане на прогнози
         document.getElementById('loading').style.display = 'block';
@@ -226,12 +226,36 @@ function displayPredictions() {
                     <strong>${match.over_25}%</strong>
                 </div>
                 <div class="detail-row">
+                    <span>� Очаквани картони:</span>
+                    <strong>${match.expected_yellow_cards || 'N/A'}</strong>
+                </div>
+                <div class="detail-row">
+                    <span>🚩 Очаквани корнери:</span>
+                    <strong>${match.expected_corners || 'N/A'}</strong>
+                </div>
+                <div class="detail-row">
                     <span>📈 ${match.home_team}:</span>
                     <strong>${match.details.home_goals_avg} гола/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>📈 ${match.away_team}:</span>
                     <strong>${match.details.away_goals_avg} гола/мач</strong>
+                </div>
+                <div class="detail-row">
+                    <span>🟨 ${match.home_team} (картони):</span>
+                    <strong>${match.details.home_yellow_cards_avg || 'N/A'}/мач</strong>
+                </div>
+                <div class="detail-row">
+                    <span>🟨 ${match.away_team} (картони):</span>
+                    <strong>${match.details.away_yellow_cards_avg || 'N/A'}/мач</strong>
+                </div>
+                <div class="detail-row">
+                    <span>🚩 ${match.home_team} (корнери):</span>
+                    <strong>${match.details.home_corners_avg || 'N/A'}/мач</strong>
+                </div>
+                <div class="detail-row">
+                    <span>🚩 ${match.away_team} (корнери):</span>
+                    <strong>${match.details.away_corners_avg || 'N/A'}/мач</strong>
                 </div>
             </div>
         </div>

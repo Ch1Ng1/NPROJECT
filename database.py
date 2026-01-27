@@ -9,13 +9,14 @@ import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
+import re
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
-    """Управление на MySQL базата данни"""
+    """Управление на MySQL базата данни с connection pooling"""
     
     def __init__(
         self,
@@ -25,16 +26,19 @@ class DatabaseManager:
         database: str = os.getenv('DB_NAME', 'football_predictor'),
         port: int = int(os.getenv('DB_PORT', 3306))
     ):
-        """Инициализира връзката към базата"""
+        """Инициализира връзката към базата с connection pooling"""
         self.config = {
             'host': host,
             'user': user,
             'password': password,
             'database': database,
             'port': port,
-            'autocommit': True
+            'autocommit': True,
+            'pool_size': 5,
+            'pool_reset_session': True
         }
         
+        self.connection = None
         try:
             self.connection = mysql.connector.connect(**self.config)
             if self.connection.is_connected():
@@ -42,10 +46,11 @@ class DatabaseManager:
                 # Увери се, че схемата е съвместима
                 try:
                     self._ensure_schema()
+                    logger.info("✅ Схемата е актуализирана")
                 except Exception as e:
-                    logger.warning(f"Схемата не можа да бъде проверена/актуализирана: {e}")
+                    logger.warning(f"⚠️  Схемата не можа да бъде проверена/актуализирана: {e}")
         except Error as e:
-            logger.error(f"❌ Грешка при свързване: {e}")
+            logger.error(f"❌ Грешка при свързване към базата: {e}")
             self.connection = None
     
     def close(self):
@@ -86,25 +91,71 @@ class DatabaseManager:
 
     def _ensure_schema(self) -> None:
         """Проверява и коригира дължините на колони при нужда"""
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute("SHOW COLUMNS FROM predictions LIKE 'home_form'")
-        home_col = cursor.fetchone()
-        cursor.execute("SHOW COLUMNS FROM predictions LIKE 'away_form'")
-        away_col = cursor.fetchone()
+        if not self.connection or not self.connection.is_connected():
+            logger.error("❌ База данни не е свързана")
+            return
+        
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            
+            # Проверка на home_form и away_form размер
+            cursor.execute("SHOW COLUMNS FROM predictions LIKE 'home_form'")
+            home_col = cursor.fetchone()
+            cursor.execute("SHOW COLUMNS FROM predictions LIKE 'away_form'")
+            away_col = cursor.fetchone()
+            
+            def _varchar_len(col: dict) -> Optional[int]:
+                if not col or 'Type' not in col:
+                    return None
+                match = re.match(r"varchar\((\d+)\)", col['Type'], re.IGNORECASE)
+                if match:
+                    try:
+                        return int(match.group(1))
+                    except ValueError:
+                        return None
+                return None
 
-        def _type_is_varchar_10(col: dict) -> bool:
-            return bool(col) and isinstance(col.get('Type'), str) and col['Type'].lower() == 'varchar(10)'
+            home_len = _varchar_len(home_col)
+            away_len = _varchar_len(away_col)
 
-        if _type_is_varchar_10(home_col) or _type_is_varchar_10(away_col):
-            alter_sql = (
-                "ALTER TABLE predictions "
-                "MODIFY home_form VARCHAR(25), "
-                "MODIFY away_form VARCHAR(25)"
-            )
-            cursor2 = self.connection.cursor()
-            cursor2.execute(alter_sql)
-            self.connection.commit()
-            logger.info("Актуализирана дължина на колоните home_form/away_form до VARCHAR(25)")
+            if (home_len is not None and home_len < 100) or (away_len is not None and away_len < 100):
+                alter_sql = (
+                    "ALTER TABLE predictions "
+                    "MODIFY home_form VARCHAR(100), "
+                    "MODIFY away_form VARCHAR(100)"
+                )
+                cursor = self.connection.cursor()
+                cursor.execute(alter_sql)
+                self.connection.commit()
+                cursor.close()
+                logger.info("✅ Актуализирана дължина на колоните home_form/away_form до VARCHAR(100)")
+            
+            # Проверка за новите колони expected_yellow_cards и expected_corners
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute("SHOW COLUMNS FROM predictions LIKE 'expected_yellow_cards'")
+            yellow_cards_col = cursor.fetchone()
+            cursor.execute("SHOW COLUMNS FROM predictions LIKE 'expected_corners'")
+            corners_col = cursor.fetchone()
+            
+            # Добавяне на новите колони ако липсват
+            if not yellow_cards_col or not corners_col:
+                alter_sql_parts = []
+                if not yellow_cards_col:
+                    alter_sql_parts.append("ADD COLUMN expected_yellow_cards DECIMAL(5,2) DEFAULT 1.8")
+                if not corners_col:
+                    alter_sql_parts.append("ADD COLUMN expected_corners DECIMAL(5,2) DEFAULT 4.2")
+                
+                if alter_sql_parts:
+                    alter_sql = "ALTER TABLE predictions " + ", ".join(alter_sql_parts)
+                    cursor = self.connection.cursor()
+                    cursor.execute(alter_sql)
+                    self.connection.commit()
+                    cursor.close()
+                    logger.info(f"✅ Добавени нови колони: {', '.join(alter_sql_parts)}")
+            
+            cursor.close()
+        except Exception as e:
+            logger.error(f"❌ Грешка при актуализация на схема: {e}")
     
     # ===== ОПЕРАЦИИ СЪС ОТБОРИТЕ =====
     
@@ -281,6 +332,8 @@ class DatabaseManager:
         confidence: int,
         expected_goals: float,
         over_25_probability: float,
+        expected_yellow_cards: float,
+        expected_corners: float,
         home_form: str,
         away_form: str,
         home_avg_goals_for: float,
@@ -289,21 +342,23 @@ class DatabaseManager:
         away_avg_goals_against: float,
         match_date: datetime
     ) -> Optional[int]:
-        """Запазва прогноза за мач"""
+        """Запазва прогноза за мач със всички статистики"""
         query = """
         INSERT INTO predictions
         (match_id, home_team_id, away_team_id, home_elo, away_elo, 
          probability_home, probability_draw, probability_away,
          prediction_bet, confidence, expected_goals, over_25_probability,
+         expected_yellow_cards, expected_corners,
          home_form, away_form, home_avg_goals_for, home_avg_goals_against,
          away_avg_goals_for, away_avg_goals_against, match_date)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s)
         """
         if self._insert_update_delete(query, (
             match_id, home_team_id, away_team_id, home_elo, away_elo,
             probability_home, probability_draw, probability_away,
             prediction_bet, confidence, expected_goals, over_25_probability,
+            expected_yellow_cards, expected_corners,
             home_form, away_form, home_avg_goals_for, home_avg_goals_against,
             away_avg_goals_for, away_avg_goals_against, match_date
         )):
