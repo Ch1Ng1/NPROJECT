@@ -61,7 +61,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 _predictions_cache: Dict[str, Any] = {
     'data': None,
     'timestamp': None,
-    'cache_duration': 86400  # 24 часа
+    'cache_duration': 0  # Изключено кеширане - зарежда от API всеки път
 }
 
 CACHE_FILE = 'cache/predictions_cache.json'

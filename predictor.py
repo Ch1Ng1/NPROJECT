@@ -501,6 +501,8 @@ class SmartPredictor:
         except Exception as e:
             logger.error(f"❌ Грешка при взимане на лигови средни за {league_id}: {e}")
             return (1.8, 4.2)  # Абсолютен дефолт
+    
+    def _analyze_match(self, fixture: Dict[str, any], home_stats: Dict[str, any], away_stats: Dict[str, any]) -> Optional[Dict[str, any]]:
         """
         Анализира един мач и генерира прогноза
         
@@ -648,10 +650,10 @@ class SmartPredictor:
         # Сортиране с приоритет на топ лиги
         all_fixtures = fixtures_data['response']
         
-        # Филтриране на мачове (изключваме жени, юноши и резерви)
+        # Филтриране на мачове (само Шампионска лига и топ лиги в Европа)
         fixtures = [
             fixture for fixture in all_fixtures 
-            if not any(keyword in fixture['league']['name'].lower() for keyword in ['women', 'u21', 'u19', 'u18', 'u17', 'youth', 'junior', 'reserve', 'b team', 'femenil', 'feminine', 'girls', 'ladies'])
+            if fixture['league']['id'] in self.TOP_LEAGUES
         ][:self.MAX_FIXTURES]
         
         # Логиране на филтрираните лиги
