@@ -30,6 +30,9 @@ Thumbs.db
 *.log
 logs/
 
+# Cache
+cache/
+
 # Database
 *.db
 *.sqlite
@@ -41,9 +44,25 @@ database.dump
 *.pyo
 *.pyd
 
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
 # Node/Web (if any)
 node_modules/
 
 # Build artifacts
 dist/
 build/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store_tmp

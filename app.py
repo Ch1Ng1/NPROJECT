@@ -10,6 +10,11 @@
 """
 import os
 from flask import Flask, render_template, jsonify, Response
+from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_compress import Compress
+from flask_talisman import Talisman
 from datetime import datetime, timedelta
 import logging
 import json
@@ -57,11 +62,30 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
+# CORS и rate limiting
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+
+# HTTP компресия
+compress = Compress()
+compress.init_app(app)
+
+# Security headers
+Talisman(
+    app,
+    force_https=os.getenv('FORCE_HTTPS', 'False').lower() == 'true',
+    content_security_policy={
+        'default-src': "'self'",
+        'script-src': "'self' 'unsafe-inline'",
+        'style-src': "'self' 'unsafe-inline'"
+    }
+)
+
 # Кеш за последните прогнози
 _predictions_cache: Dict[str, Any] = {
     'data': None,
     'timestamp': None,
-    'cache_duration': 0  # Изключено кеширане - зарежда от API всеки път
+    'cache_duration': int(os.getenv('CACHE_DURATION', 3600))  # Кеширане по подразбиране: 1 час
 }
 
 CACHE_FILE = 'cache/predictions_cache.json'
@@ -285,6 +309,7 @@ def index() -> str:
         return "Грешка при зареждане на страницата", 500
 
 @app.route('/api/predictions')
+@limiter.limit("10 per minute")
 def get_predictions() -> tuple[Response, int]:
     """
     Връща прогнози за днес с кеширане
@@ -515,7 +540,10 @@ def get_database_stats() -> tuple[Response, int]:
         cursor = db.connection.cursor()
         
         stats = {}
+        valid_tables = {'teams', 'matches', 'predictions', 'team_statistics'}
         for table in ['teams', 'matches', 'predictions', 'team_statistics']:
+            if table not in valid_tables:
+                raise ValueError(f"Невалидна таблица: {table}")
             cursor.execute(f"SELECT COUNT(*) FROM {table}")
             count = cursor.fetchone()[0]
             stats[table] = count
