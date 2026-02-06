@@ -333,18 +333,20 @@ def get_predictions() -> tuple[Response, int]:
             }), 500
         
         # Използвай кеширани прогнози ако са валидни
-        cached = _get_cached_predictions()
-        if cached:
-            return jsonify({
-                'success': True,
-                'total': len(cached),
-                'predictions': cached,
-                'source': 'cache'
-            }), 200
+        # cached = _get_cached_predictions()
+        # if cached:
+        #     return jsonify({
+        #         'success': True,
+        #         'total': len(cached),
+        #         'predictions': cached,
+        #         'source': 'cache'
+        #     }), 200
         
         # Генериране на нови прогнози
         logger.info("📊 Генериране на нови прогнози...")
+        print("DEBUG: Generating fresh predictions...")
         predictions = predictor.get_today_predictions()
+        print(f"DEBUG: Generated {len(predictions)} predictions")
         
         if not predictions:
             logger.warning("⚠️  Няма прогнози за днес")
