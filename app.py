@@ -263,6 +263,7 @@ def _save_predictions_to_db(predictions: List[Dict[str, Any]]) -> int:
 
 def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
     """Актуализира кеша на прогнозите"""
+    logger.info(f"🔄 Започвам актуализиране на кеш с {len(predictions)} прогнози")
     _predictions_cache['data'] = predictions
     _predictions_cache['timestamp'] = datetime.now()
     logger.info(f"💾 Кеш актуализиран с {len(predictions)} прогнози")
@@ -278,7 +279,7 @@ def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
             )
             db.connection.commit()
             cursor.close()
-            logger.info(f"💾 Прогнози записани в базата за {today}")
+            logger.info(f"💾 Прогнози записани в базата за {today} - {len(predictions)} мача")
         except Exception as e:
             logger.error(f"❌ Грешка при запис в predictions_cache: {e}")
     
@@ -291,7 +292,7 @@ def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
         }
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False, indent=2)
-        logger.info("💾 Кеш записан във файл")
+        logger.info(f"💾 Кеш записан във файл: {CACHE_FILE}")
     except Exception as e:
         logger.error(f"❌ Грешка при запис на кеш във файл: {e}")
     
@@ -346,6 +347,11 @@ def get_predictions() -> tuple[Response, int]:
         logger.info("📊 Генериране на нови прогнози...")
         print("DEBUG: Generating fresh predictions...")
         predictions = predictor.get_today_predictions()
+        print(f"DEBUG: Generated predictions, type: {type(predictions)}")
+        
+        if predictions is None:
+            predictions = []
+        
         print(f"DEBUG: Generated {len(predictions)} predictions")
         
         if not predictions:
