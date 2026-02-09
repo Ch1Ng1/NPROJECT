@@ -1,15 +1,15 @@
 /* Основни стилове */
 :root {
-    --primary-color: #667eea;
-    --secondary-color: #764ba2;
-    --success-color: #11998e;
-    --success-light: #38ef7d;
-    --danger-color: #f44336;
-    --warning-color: #ff9800;
-    --dark-bg: #1a1a1a;
-    --dark-card: #2d2d2d;
+    --primary-color: #1e40af;
+    --secondary-color: #dc2626;
+    --success-color: #059669;
+    --success-light: #10b981;
+    --danger-color: #dc2626;
+    --warning-color: #ea580c;
+    --dark-bg: #0f172a;
+    --dark-card: #1e293b;
     --light-text: #ffffff;
-    --border-color: #e0e0e0;
+    --border-color: #475569;
 }
 
 * {
@@ -114,12 +114,12 @@ body.dark-mode .stat-card {
 }
 
 .stat-label {
-    color: #666;
+    color: #374151;
     margin-top: 5px;
 }
 
 body.dark-mode .stat-label {
-    color: #aaa;
+    color: #9ca3af;
 }
 
 /* Филтри */
@@ -148,7 +148,7 @@ body.dark-mode .filters {
 
 .filter-item label {
     font-weight: 600;
-    color: #333;
+    color: #1f2937;
 }
 
 body.dark-mode .filter-item label {
@@ -162,7 +162,7 @@ body.dark-mode .filter-item label {
     border-radius: 8px;
     font-size: 1em;
     background: white;
-    color: #333;
+    color: #1f2937;
     cursor: pointer;
     transition: all 0.3s ease;
 }
