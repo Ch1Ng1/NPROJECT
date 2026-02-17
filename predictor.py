@@ -60,6 +60,7 @@ class SmartPredictor:
 
     # Топ европейски лиги (само първите дивизии)
     TOP_LEAGUES = {
+        2,   # UEFA Champions League (Europe)
         39,  # Premier League (England)
         140,  # La Liga (Spain)
         78,  # Bundesliga (Germany)
@@ -72,6 +73,7 @@ class SmartPredictor:
 
     # Приоритетни лиги (ще се показват първи)
     PRIORITY_LEAGUES = {
+        2,   # UEFA Champions League (Europe) - ПРИОРИТЕТ
         39,  # Premier League (England) - ПРИОРИТЕТ
         140,  # La Liga (Spain) - ПРИОРИТЕТ
         78,  # Bundesliga (Germany) - ПРИОРИТЕТ
@@ -451,6 +453,7 @@ class SmartPredictor:
         """
         # Връщаме фиксирани стойности за бързина - няма нужда от API заявки
         league_defaults = {
+            2: (2.5, 5.8),   # UEFA Champions League
             39: (2.5, 5.8),  # Premier League
             140: (2.3, 5.5),  # La Liga
             78: (2.1, 5.2),  # Bundesliga
@@ -602,6 +605,7 @@ class SmartPredictor:
 
         # Вземи мачове за днес
         today = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"📅 Анализиране на мачове за дата: {today}")
         fixtures_data = self._request("fixtures", {"date": today, "timezone": "Europe/Sofia"})
 
         if not fixtures_data or not fixtures_data.get("response"):
@@ -616,13 +620,17 @@ class SmartPredictor:
             fixture for fixture in all_fixtures if fixture["league"]["id"] in self.TOP_LEAGUES
         ][: self.MAX_FIXTURES]
 
+        logger.info(f"📋 Намерени {len(all_fixtures)} мача, филтрирани до {len(fixtures)} от топ лиги")
+
         # ЗА ТЕСТВАНЕ: Върни фиктивни прогнози вместо да анализираш истински мачове
         if not fixtures:
             logger.warning("⚠️  Няма мачове от топ европейски лиги днес")
             return []
 
         predictions = []
-        for fixture in fixtures:
+        logger.info(f"🔍 Започвам анализ на {len(fixtures)} мача")
+        for i, fixture in enumerate(fixtures):
+            logger.info(f"⚽ Анализирам мач {i+1}/{len(fixtures)}: {fixture['league']['name']} - {fixture['teams']['home']['name']} vs {fixture['teams']['away']['name']}")
             try:
                 league_id = fixture["league"]["id"]
                 home_id = fixture["teams"]["home"]["id"]

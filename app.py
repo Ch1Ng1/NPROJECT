@@ -324,6 +324,7 @@ def get_predictions() -> tuple[Response, int]:
     Returns:
         JSON response с прогнози или грешка
     """
+    logger.info("🔥 get_predictions called!")
     try:
         # Проверяване на API ключ
         if not API_KEY:
@@ -351,14 +352,14 @@ def get_predictions() -> tuple[Response, int]:
         
         # Генериране на нови прогнози
         logger.info("📊 Генериране на нови прогнози...")
-        print("DEBUG: Generating fresh predictions...")
+        logger.info("DEBUG: Generating fresh predictions...")
         predictions = predictor.get_today_predictions()
-        print(f"DEBUG: Generated predictions, type: {type(predictions)}")
+        logger.info(f"DEBUG: Generated predictions, type: {type(predictions)}")
         
         if predictions is None:
             predictions = []
         
-        print(f"DEBUG: Generated {len(predictions)} predictions")
+        logger.info(f"DEBUG: Generated {len(predictions)} predictions")
         
         if not predictions:
             logger.warning("⚠️  Няма прогнози за днес")
