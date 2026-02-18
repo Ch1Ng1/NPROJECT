@@ -39,6 +39,11 @@ cache/
 *.sqlite3
 database.dump
 
+# Test files
+check_*.py
+test_*.py
+show_*.py
+
 # Python caches
 .pytest_cache/
 *.pyo
