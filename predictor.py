@@ -61,6 +61,7 @@ class SmartPredictor:
     # Топ европейски лиги (само първите дивизии)
     TOP_LEAGUES = {
         2,   # UEFA Champions League (Europe)
+        3,   # UEFA Europa League (Europe)
         39,  # Premier League (England)
         140,  # La Liga (Spain)
         78,  # Bundesliga (Germany)
@@ -69,11 +70,13 @@ class SmartPredictor:
         88,  # Eredivisie (Netherlands)
         94,  # Primeira Liga (Portugal)
         144,  # Jupiler Pro League (Belgium)
+        848, # UEFA Europa Conference League (Europe)
     }
 
     # Приоритетни лиги (ще се показват първи)
     PRIORITY_LEAGUES = {
         2,   # UEFA Champions League (Europe) - ПРИОРИТЕТ
+        3,   # UEFA Europa League (Europe) - ПРИОРИТЕТ
         39,  # Premier League (England) - ПРИОРИТЕТ
         140,  # La Liga (Spain) - ПРИОРИТЕТ
         78,  # Bundesliga (Germany) - ПРИОРИТЕТ
@@ -82,6 +85,7 @@ class SmartPredictor:
         88,  # Eredivisie (Netherlands) - ПРИОРИТЕТ
         94,  # Primeira Liga (Portugal) - ПРИОРИТЕТ
         144,  # Jupiler Pro League (Belgium) - ПРИОРИТЕТ
+        848, # UEFA Europa Conference League (Europe) - ПРИОРИТЕТ
     }
 
     def __init__(self, api_key: str) -> None:
