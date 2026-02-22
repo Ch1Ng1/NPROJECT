@@ -152,14 +152,16 @@ class TestSmartPredictor:
         predictor = SmartPredictor(api_key="valid_key_12345")
         
         # Premier League
-        cards, corners = predictor._get_league_averages(39)
+        cards, corners, goals = predictor._get_league_averages(39)
         assert cards > 0
         assert corners > 0
+        assert goals > 0
         
         # Неизвестна лига
-        cards, corners = predictor._get_league_averages(99999)
-        assert cards == 2.8  # Дефолт
-        assert corners == 10.5  # Дефолт
+        cards, corners, goals = predictor._get_league_averages(99999)
+        assert cards == 1.8  # Дефолт
+        assert corners == 4.2  # Дефолт
+        assert goals == 2.5  # Дефолт
 
 
 if __name__ == '__main__':

@@ -26,4 +26,4 @@ MAX_FIXTURES: int = 50
 VALID_TABLES = {"teams", "matches", "predictions", "team_statistics"}
 
 # Season
-CURRENT_SEASON: str = "2025"
+CURRENT_SEASON: str = "2024"

@@ -183,23 +183,30 @@ class SmartPredictor:
         Returns:
             Статистики на отбора или None
         """
+        logger.debug(f"🔍 Getting stats for team {team_id}, league {league_id}, season {self.SEASON}")
         cache_key = f"{team_id}_{league_id}_{self.SEASON}"
         
         if cache_key in self.team_stats_cache:
             logger.debug(f"📦 Използвам кеширани статистики за отбор {team_id}")
             return self.team_stats_cache[cache_key]
         
-        stats_data = self._request(
-            "teams/statistics",
-            {"league": league_id, "season": self.SEASON, "team": team_id},
-        )
+        try:
+            stats_data = self._request(
+                "teams/statistics",
+                {"league": league_id, "season": self.SEASON, "team": team_id},
+            )
+        except Exception as e:
+            logger.error(f"❌ Error requesting stats for team {team_id}: {e}")
+            return None
         
         if stats_data and stats_data.get("response"):
             self.team_stats_cache[cache_key] = stats_data["response"]
             # Запис на persistent кеш
             self._save_persistent_cache()
+            logger.debug(f"✅ Got stats for team {team_id}: goals avg = {stats_data['response'].get('goals', {}).get('for', {}).get('average', {}).get('total')}")
             return stats_data["response"]
         
+        logger.debug(f"❌ No stats for team {team_id}")
         return None
 
     def _get_team_form(self, team_id: int, league_id: int, limit: int = 5) -> str:
@@ -224,7 +231,12 @@ class SmartPredictor:
             
             form_chars = []
             for fixture in fixtures_data["response"]:
-                if fixture.get("teams") and fixture.get("fixture"):
+                if fixture.get("teams") and fixture.get("fixture") and fixture.get("league"):
+                    # Филтриране само мачове от същата лига (без приятелски срещи)
+                    fixture_league_id = fixture["league"]["id"]
+                    if fixture_league_id != league_id:
+                        continue
+                        
                     home_id = fixture["teams"]["home"]["id"]
                     away_id = fixture["teams"]["away"]["id"]
                     status = fixture["fixture"].get("status", {}).get("short")
@@ -272,25 +284,25 @@ class SmartPredictor:
         Returns:
             Dict със статистики за анализ
         """
+        logger.debug(f"🔧 Preparing stats for team {team_id}, league {league_id}, team_stats is None: {team_stats is None}")
         # Взимане на средни стойности за картони и корнери
-        avg_cards, avg_corners = self._fetch_recent_cards_corners(team_id)
+        avg_cards, avg_corners = self._fetch_recent_cards_corners(team_id, league_id)
         
         # Ако няма данни, използваме лигови средни
         if avg_cards is None or avg_corners is None:
-            league_cards, league_corners = self._get_league_averages(league_id)
+            league_cards, league_corners, league_goals = self._get_league_averages(league_id)
             avg_cards = avg_cards or league_cards
             avg_corners = avg_corners or league_corners
         
         # Средни голове
         goals_avg = 1.5  # Default
-        if team_stats and team_stats.get("statistics"):
-            for stat in team_stats["statistics"]:
-                if stat.get("type") == "Goals scored per match":
-                    try:
-                        goals_avg = float(stat.get("value", 1.5))
-                        break
-                    except (ValueError, TypeError):
-                        pass
+        if team_stats and team_stats.get("goals", {}).get("for", {}).get("average", {}).get("total"):
+            try:
+                goals_avg = float(team_stats["goals"]["for"]["average"]["total"])
+            except (ValueError, TypeError):
+                # Ако няма индивидуални данни, използваме лигови средни
+                _, _, league_goals = self._get_league_averages(league_id)
+                goals_avg = league_goals
         
         return {
             "form": form,
@@ -418,8 +430,8 @@ class SmartPredictor:
         """
         try:
             # Първо приоритет: Статистика от последните 5 мача
-            if team_id:
-                recent_cards, _ = self._fetch_recent_cards_corners(team_id)
+            if team_id and league_id:
+                recent_cards, _ = self._fetch_recent_cards_corners(team_id, league_id)
                 if recent_cards is not None:
                     logger.debug(f"📊 Използвам картони от последни 5 мача: {recent_cards}")
                     return recent_cards
@@ -466,7 +478,7 @@ class SmartPredictor:
 
             # Ако няма данни от сезонни статистики, използвай лигови средни
             if league_id:
-                league_cards, _ = self._get_league_averages(league_id)
+                league_cards, _, _ = self._get_league_averages(league_id)
                 logger.debug(f"🏆 Използвам лигови средни картони: {league_cards}")
                 return league_cards
 
@@ -490,8 +502,8 @@ class SmartPredictor:
         """
         try:
             # Първо приоритет: Статистика от последните 5 мача
-            if team_id:
-                _, recent_corners = self._fetch_recent_cards_corners(team_id)
+            if team_id and league_id:
+                _, recent_corners = self._fetch_recent_cards_corners(team_id, league_id)
                 if recent_corners is not None:
                     logger.debug(f"📊 Използвам корнери от последни 5 мача: {recent_corners}")
                     return recent_corners
@@ -535,7 +547,7 @@ class SmartPredictor:
 
             # Ако няма данни от сезонни статистики, използвай лигови средни
             if league_id:
-                _, league_corners = self._get_league_averages(league_id)
+                _, league_corners, _ = self._get_league_averages(league_id)
                 logger.debug(f"🏆 Използвам лигови средни корнери: {league_corners}")
                 return league_corners
 
@@ -546,14 +558,14 @@ class SmartPredictor:
             return 4.2
 
     def _fetch_recent_cards_corners(
-        self, team_id: int, limit: int = 5
+        self, team_id: int, league_id: int, limit: int = 5
     ) -> Tuple[Optional[float], Optional[float]]:
         """Връща средни жълти картони и корнери от последните N мача.
 
         Използва fixtures?team=...&last=N и fixtures/statistics за всеки мач.
         Връща (avg_cards, avg_corners) или (None, None) при липса на данни.
         """
-        cache_key = f"{team_id}_{limit}"
+        cache_key = f"{team_id}_{league_id}_{limit}"
         
         if cache_key in self.recent_matches_cache:
             logger.debug(f"📦 Използвам кеширани данни за последни мачове на отбор {team_id}")
@@ -570,7 +582,7 @@ class SmartPredictor:
             fixture_ids = [
                 item["fixture"]["id"]
                 for item in fixtures_data["response"]
-                if item.get("fixture") and item["fixture"].get("id")
+                if item.get("fixture") and item["fixture"].get("id") and item.get("league") and item["league"]["id"] == league_id
             ]
             if not fixture_ids:
                 return None, None
@@ -638,31 +650,31 @@ class SmartPredictor:
             self._save_persistent_cache()
             return None, None
 
-    def _get_league_averages(self, league_id: int, season: int = 2024) -> Tuple[float, float]:
+    def _get_league_averages(self, league_id: int, season: int = 2024) -> Tuple[float, float, float]:
         """
-        Връща средни стойности за картони и корнери за лигата
+        Връща средни стойности за картони, корнери и голове за лигата
 
         Args:
             league_id: ID на лигата
             season: Сезон
 
         Returns:
-            Tuple (avg_cards, avg_corners)
+            Tuple (avg_cards, avg_corners, avg_goals)
         """
         # Връщаме фиксирани стойности за бързина - няма нужда от API заявки
         league_defaults = {
-            2: (2.5, 5.8),   # UEFA Champions League
-            39: (2.5, 5.8),  # Premier League
-            140: (2.3, 5.5),  # La Liga
-            78: (2.1, 5.2),  # Bundesliga
-            135: (2.4, 5.6),  # Serie A
-            61: (2.2, 5.4),  # Ligue 1
-            88: (2.0, 5.0),  # Eredivisie
-            94: (2.1, 5.1),  # Primeira Liga
-            144: (1.9, 4.8),  # Jupiler Pro League
+            2: (2.5, 5.8, 2.8),   # UEFA Champions League
+            39: (2.5, 5.8, 2.7),  # Premier League
+            140: (2.3, 5.5, 2.6),  # La Liga
+            78: (2.1, 5.2, 2.9),  # Bundesliga
+            135: (2.4, 5.6, 2.5),  # Serie A
+            61: (2.2, 5.4, 2.4),  # Ligue 1
+            88: (2.0, 5.0, 2.8),  # Eredivisie
+            94: (2.1, 5.1, 2.6),  # Primeira Liga
+            144: (1.9, 4.8, 2.7),  # Jupiler Pro League
         }
 
-        return league_defaults.get(league_id, (1.8, 4.2))  # Дефолтни стойности
+        return league_defaults.get(league_id, (1.8, 4.2, 2.5))  # Дефолтни стойности
 
     def _analyze_match(
         self, fixture: Dict[str, any], home_stats: Dict[str, any], away_stats: Dict[str, any]
@@ -799,6 +811,7 @@ class SmartPredictor:
         Returns:
             Список с прогнози (всяка прогноза е dict)
         """
+        logger.info("📊 DEBUG: get_today_predictions called")
         logger.info("📊 Започване на анализ...")
 
         # Вземи мачове за днес
