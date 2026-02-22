@@ -65,7 +65,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 # CORS и rate limiting
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5000", "http://127.0.0.1:5000"],
+        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "http://localhost:3000", "http://127.0.0.1:3000"],
         "methods": ["GET", "POST"],
         "allow_headers": ["Content-Type", "Authorization"]
     }

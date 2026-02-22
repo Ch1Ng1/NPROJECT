@@ -81,20 +81,6 @@ function setCachedPredictions(predictions) {
 
 async function loadPredictions() {
     try {
-        // Проверка за кеш
-        // const cached = getCachedPredictions();
-        // if (cached) {
-        //     console.log('📦 Използвам кеширани прогнози');
-        //     allPredictions = cached;
-        //     updateStats();
-        //     displayPredictions();
-        //     document.getElementById('loading').style.display = 'none';
-        //     
-        //     // Показване на съобщение за кеш
-        //     showCacheInfo();
-        //     return;
-        // }
-        
         // Зареждане на прогнози
         document.getElementById('loading').style.display = 'block';
         document.getElementById('error').style.display = 'none';
@@ -125,8 +111,9 @@ async function loadPredictions() {
 
 function updateStats() {
     const total = allPredictions.length;
-    const highConf = allPredictions.filter(p => p.prediction.confidence >= 60).length;
-    const avgConf = (allPredictions.reduce((sum, p) => sum + p.prediction.confidence, 0) / total) || 0;
+    const highConf = allPredictions.filter(p => p.prediction && p.prediction.confidence >= 60).length;
+    const validPredictions = allPredictions.filter(p => p.prediction);
+    const avgConf = validPredictions.length > 0 ? (validPredictions.reduce((sum, p) => sum + p.prediction.confidence, 0) / validPredictions.length) : 0;
     
     document.getElementById('totalMatches').textContent = total;
     document.getElementById('highConfidence').textContent = highConf;
@@ -143,12 +130,12 @@ function displayPredictions() {
     
     let filtered = allPredictions.filter(p => {
         // Филтър увереност
-        if (confidenceFilter === 'high' && p.prediction.confidence < 60) return false;
-        if (confidenceFilter === 'medium' && (p.prediction.confidence < 45 || p.prediction.confidence >= 60)) return false;
-        if (confidenceFilter === 'low' && p.prediction.confidence >= 45) return false;
+        if (confidenceFilter === 'high' && (!p.prediction || p.prediction.confidence < 60)) return false;
+        if (confidenceFilter === 'medium' && (!p.prediction || p.prediction.confidence < 45 || p.prediction.confidence >= 60)) return false;
+        if (confidenceFilter === 'low' && (!p.prediction || p.prediction.confidence >= 45)) return false;
         
         // Филтър прогноза
-        if (predictionFilter !== 'all' && p.prediction.bet !== predictionFilter) return false;
+        if (predictionFilter !== 'all' && (!p.prediction || p.prediction.bet !== predictionFilter)) return false;
         
         // Филтър голове
         if (goalsFilter === 'high' && p.over_25 < 60) return false;
@@ -166,64 +153,64 @@ function displayPredictions() {
         <div class="match-card">
             <div class="match-header">
                 <div>
-                    <div class="match-time">🕐 ${match.time}</div>
-                    <div class="match-league">${match.league}</div>
+                    <div class="match-time">🕐 ${match.time || 'N/A'}</div>
+                    <div class="match-league">${match.league || 'N/A'}</div>
                 </div>
             </div>
             
             <div class="teams">
                 <div class="team-row">
-                    <span class="team-name">🏠 ${match.home_team}</span>
+                    <span class="team-name">🏠 ${match.home_team || 'Unknown'}</span>
                     <div class="form-badges">
                         ${(match.home_form || '').split('').slice(0, 5).map(r => 
                             `<span class="form-badge ${r}">${r}</span>`
                         ).join('')}
                     </div>
-                    <span class="team-elo">⭐ ${match.home_elo}</span>
+                    <span class="team-elo">⭐ ${match.home_elo || 'N/A'}</span>
                 </div>
                 
                 <div class="team-row">
-                    <span class="team-name">✈️ ${match.away_team}</span>
+                    <span class="team-name">✈️ ${match.away_team || 'Unknown'}</span>
                     <div class="form-badges">
                         ${(match.away_form || '').split('').slice(0, 5).map(r => 
                             `<span class="form-badge ${r}">${r}</span>`
                         ).join('')}
                     </div>
-                    <span class="team-elo">⭐ ${match.away_elo}</span>
+                    <span class="team-elo">⭐ ${match.away_elo || 'N/A'}</span>
                 </div>
             </div>
             
             <div class="probabilities">
-                <div class="prob-item ${match.prediction.bet === '1' ? 'highlight' : ''}">
+                <div class="prob-item ${match.prediction && match.prediction.bet === '1' ? 'highlight' : ''}">
                     <div class="prob-label">Домакин</div>
-                    <div class="prob-value">${match.probabilities['1']}%</div>
+                    <div class="prob-value">${match.probabilities ? match.probabilities['1'] || 0 : 0}%</div>
                 </div>
-                <div class="prob-item ${match.prediction.bet === 'X' ? 'highlight' : ''}">
+                <div class="prob-item ${match.prediction && match.prediction.bet === 'X' ? 'highlight' : ''}">
                     <div class="prob-label">Равен</div>
-                    <div class="prob-value">${match.probabilities['X']}%</div>
+                    <div class="prob-value">${match.probabilities ? match.probabilities['X'] || 0 : 0}%</div>
                 </div>
-                <div class="prob-item ${match.prediction.bet === '2' ? 'highlight' : ''}">
+                <div class="prob-item ${match.prediction && match.prediction.bet === '2' ? 'highlight' : ''}">
                     <div class="prob-label">Гост</div>
-                    <div class="prob-value">${match.probabilities['2']}%</div>
+                    <div class="prob-value">${match.probabilities ? match.probabilities['2'] || 0 : 0}%</div>
                 </div>
             </div>
             
             <div class="prediction-box">
                 <div class="prediction-label">🎯 Препоръка</div>
-                <div class="prediction-value">${getBetLabel(match.prediction.bet)}</div>
+                <div class="prediction-value">${match.prediction ? getBetLabel(match.prediction.bet) : 'Няма'}</div>
                 <span class="confidence-badge">
-                    ${match.prediction.confidence}% увереност
+                    ${match.prediction ? match.prediction.confidence + '%' : '0%'} увереност
                 </span>
             </div>
             
             <div class="details">
                 <div class="detail-row">
                     <span>⚽ Очаквани голове:</span>
-                    <strong>${match.expected_goals}</strong>
+                    <strong>${match.expected_goals || 'N/A'}</strong>
                 </div>
                 <div class="detail-row">
                     <span>📊 Over 2.5:</span>
-                    <strong>${match.over_25}%</strong>
+                    <strong>${match.over_25 || 'N/A'}%</strong>
                 </div>
                 <div class="detail-row">
                     <span>� Очаквани картони:</span>
@@ -235,27 +222,27 @@ function displayPredictions() {
                 </div>
                 <div class="detail-row">
                     <span>📈 ${match.home_team}:</span>
-                    <strong>${match.details.home_goals_avg} гола/мач</strong>
+                    <strong>${match.details ? match.details.home_goals_avg || 'N/A' : 'N/A'} гола/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>📈 ${match.away_team}:</span>
-                    <strong>${match.details.away_goals_avg} гола/мач</strong>
+                    <strong>${match.details ? match.details.away_goals_avg || 'N/A' : 'N/A'} гола/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>🟨 ${match.home_team} (картони):</span>
-                    <strong>${match.details.home_yellow_cards_avg || 'N/A'}/мач</strong>
+                    <strong>${match.details ? match.details.home_yellow_cards_avg || 'N/A' : 'N/A'}/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>🟨 ${match.away_team} (картони):</span>
-                    <strong>${match.details.away_yellow_cards_avg || 'N/A'}/мач</strong>
+                    <strong>${match.details ? match.details.away_yellow_cards_avg || 'N/A' : 'N/A'}/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>🚩 ${match.home_team} (корнери):</span>
-                    <strong>${match.details.home_corners_avg || 'N/A'}/мач</strong>
+                    <strong>${match.details ? match.details.home_corners_avg || 'N/A' : 'N/A'}/мач</strong>
                 </div>
                 <div class="detail-row">
                     <span>🚩 ${match.away_team} (корнери):</span>
-                    <strong>${match.details.away_corners_avg || 'N/A'}/мач</strong>
+                    <strong>${match.details ? match.details.away_corners_avg || 'N/A' : 'N/A'}/мач</strong>
                 </div>
             </div>
         </div>

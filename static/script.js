@@ -81,20 +81,6 @@ function setCachedPredictions(predictions) {
 
 async function loadPredictions() {
     try {
-        // Проверка за кеш
-        // const cached = getCachedPredictions();
-        // if (cached) {
-        //     console.log('📦 Използвам кеширани прогнози');
-        //     allPredictions = cached;
-        //     updateStats();
-        //     displayPredictions();
-        //     document.getElementById('loading').style.display = 'none';
-        //     
-        //     // Показване на съобщение за кеш
-        //     showCacheInfo();
-        //     return;
-        // }
-        
         // Зареждане на прогнози
         document.getElementById('loading').style.display = 'block';
         document.getElementById('error').style.display = 'none';

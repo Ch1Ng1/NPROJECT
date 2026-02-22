@@ -16,6 +16,7 @@
 
 import json
 import logging
+import os
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -108,6 +109,15 @@ class SmartPredictor:
         self.base_url = "https://v3.football.api-sports.io"
         self.headers = {"x-apisports-key": api_key, "User-Agent": "SmartFootballPredictor/1.0"}
         self.elo_ratings: Dict[int, float] = defaultdict(lambda: self.INITIAL_ELO)
+        self.team_stats_cache: Dict[str, Dict[str, any]] = {}  # Кеш за статистики на отбори
+        self.recent_matches_cache: Dict[str, Tuple[Optional[float], Optional[float]]] = {}  # Кеш за последни мачове
+
+        # Persistent storage за кеширане
+        self.team_stats_file = "cache/team_stats_cache.json"
+        self.recent_matches_file = "cache/recent_matches_cache.json"
+        
+        # Зареждане на persistent кеш
+        self._load_persistent_cache()
 
         # Конфигуриране на retry стратегия
         self.session = requests.Session()
@@ -117,6 +127,177 @@ class SmartPredictor:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+
+    def _load_persistent_cache(self) -> None:
+        """Зарежда persistent кеш от файлове"""
+        try:
+            # Зареждане на team stats cache
+            if os.path.exists(self.team_stats_file):
+                with open(self.team_stats_file, 'r', encoding='utf-8') as f:
+                    self.team_stats_cache = json.load(f)
+                logger.info(f"📦 Заредени {len(self.team_stats_cache)} кеширани статистики на отбори")
+            
+            # Зареждане на recent matches cache
+            if os.path.exists(self.recent_matches_file):
+                with open(self.recent_matches_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Конвертиране на tuples обратно
+                    self.recent_matches_cache = {
+                        k: tuple(v) if v is not None else None for k, v in data.items()
+                    }
+                logger.info(f"📦 Заредени {len(self.recent_matches_cache)} кеширани данни за последни мачове")
+                
+        except Exception as e:
+            logger.warning(f"⚠️  Грешка при зареждане на persistent кеш: {e}")
+
+    def _save_persistent_cache(self) -> None:
+        """Записва persistent кеш във файлове"""
+        try:
+            # Създаване на cache директория ако не съществува
+            os.makedirs("cache", exist_ok=True)
+            
+            # Запис на team stats cache
+            with open(self.team_stats_file, 'w', encoding='utf-8') as f:
+                json.dump(self.team_stats_cache, f, ensure_ascii=False, indent=2)
+            
+            # Запис на recent matches cache (конвертиране на tuples към lists)
+            recent_data = {
+                k: list(v) if v is not None else None for k, v in self.recent_matches_cache.items()
+            }
+            with open(self.recent_matches_file, 'w', encoding='utf-8') as f:
+                json.dump(recent_data, f, ensure_ascii=False, indent=2)
+                
+            logger.debug("💾 Persistent кеш записан успешно")
+            
+        except Exception as e:
+            logger.error(f"❌ Грешка при запис на persistent кеш: {e}")
+
+    def _get_team_statistics(self, team_id: int, league_id: int) -> Optional[Dict[str, any]]:
+        """
+        Получава статистики за отбор с кеширане
+
+        Args:
+            team_id: ID на отбора
+            league_id: ID на лигата
+
+        Returns:
+            Статистики на отбора или None
+        """
+        cache_key = f"{team_id}_{league_id}_{self.SEASON}"
+        
+        if cache_key in self.team_stats_cache:
+            logger.debug(f"📦 Използвам кеширани статистики за отбор {team_id}")
+            return self.team_stats_cache[cache_key]
+        
+        stats_data = self._request(
+            "teams/statistics",
+            {"league": league_id, "season": self.SEASON, "team": team_id},
+        )
+        
+        if stats_data and stats_data.get("response"):
+            self.team_stats_cache[cache_key] = stats_data["response"]
+            # Запис на persistent кеш
+            self._save_persistent_cache()
+            return stats_data["response"]
+        
+        return None
+
+    def _get_team_form(self, team_id: int, league_id: int, limit: int = 5) -> str:
+        """
+        Връща форма на отбора като string (W/D/L) от последните мачове
+        
+        Args:
+            team_id: ID на отбора
+            league_id: ID на лигата
+            limit: Брой мачове за анализ
+            
+        Returns:
+            String с форма (напр. "WWDLL")
+        """
+        try:
+            fixtures_data = self._request(
+                "fixtures", {"team": team_id, "last": limit, "timezone": "Europe/Sofia"}
+            )
+            
+            if not fixtures_data or not fixtures_data.get("response"):
+                return ""
+            
+            form_chars = []
+            for fixture in fixtures_data["response"]:
+                if fixture.get("teams") and fixture.get("fixture"):
+                    home_id = fixture["teams"]["home"]["id"]
+                    away_id = fixture["teams"]["away"]["id"]
+                    status = fixture["fixture"].get("status", {}).get("short")
+                    
+                    # Само завършени мачове
+                    if status != "FT":
+                        continue
+                        
+                    home_goals = fixture["goals"]["home"]
+                    away_goals = fixture["goals"]["away"]
+                    
+                    if team_id == home_id:
+                        # Отборът е домакин
+                        if home_goals > away_goals:
+                            form_chars.append("W")
+                        elif home_goals == away_goals:
+                            form_chars.append("D")
+                        else:
+                            form_chars.append("L")
+                    else:
+                        # Отборът е гост
+                        if away_goals > home_goals:
+                            form_chars.append("W")
+                        elif away_goals == home_goals:
+                            form_chars.append("D")
+                        else:
+                            form_chars.append("L")
+            
+            return "".join(form_chars[-limit:])  # Последните N мача
+            
+        except Exception as e:
+            logger.error(f"❌ Грешка при вземане на форма за отбор {team_id}: {e}")
+            return ""
+
+    def _prepare_team_stats(self, team_stats: Optional[Dict], form: str, team_id: int, league_id: int) -> Dict[str, any]:
+        """
+        Подготвя статистики за отбор за анализ
+        
+        Args:
+            team_stats: Статистики от API или None
+            form: Форма като string
+            team_id: ID на отбора
+            league_id: ID на лигата
+            
+        Returns:
+            Dict със статистики за анализ
+        """
+        # Взимане на средни стойности за картони и корнери
+        avg_cards, avg_corners = self._fetch_recent_cards_corners(team_id)
+        
+        # Ако няма данни, използваме лигови средни
+        if avg_cards is None or avg_corners is None:
+            league_cards, league_corners = self._get_league_averages(league_id)
+            avg_cards = avg_cards or league_cards
+            avg_corners = avg_corners or league_corners
+        
+        # Средни голове
+        goals_avg = 1.5  # Default
+        if team_stats and team_stats.get("statistics"):
+            for stat in team_stats["statistics"]:
+                if stat.get("type") == "Goals scored per match":
+                    try:
+                        goals_avg = float(stat.get("value", 1.5))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+        
+        return {
+            "form": form,
+            "goals_avg": goals_avg,
+            "yellow_cards_avg": avg_cards,
+            "corners_avg": avg_corners,
+        }
 
     def _request(self, endpoint: str, params: Dict[str, any]) -> Optional[Dict[str, any]]:
         """
@@ -372,11 +553,18 @@ class SmartPredictor:
         Използва fixtures?team=...&last=N и fixtures/statistics за всеки мач.
         Връща (avg_cards, avg_corners) или (None, None) при липса на данни.
         """
+        cache_key = f"{team_id}_{limit}"
+        
+        if cache_key in self.recent_matches_cache:
+            logger.debug(f"📦 Използвам кеширани данни за последни мачове на отбор {team_id}")
+            return self.recent_matches_cache[cache_key]
+        
         try:
             fixtures_data = self._request(
                 "fixtures", {"team": team_id, "last": limit, "timezone": "Europe/Sofia"}
             )
             if not fixtures_data or not fixtures_data.get("response"):
+                self.recent_matches_cache[cache_key] = (None, None)
                 return None, None
 
             fixture_ids = [
@@ -439,9 +627,15 @@ class SmartPredictor:
                 f"📊 Последни {len(fixture_ids)} мача за {team_id}: "
                 f"карти={avg_cards}, корнери={avg_corners}"
             )
+            self.recent_matches_cache[cache_key] = (avg_cards, avg_corners)
+            # Запис на persistent кеш
+            self._save_persistent_cache()
             return avg_cards, avg_corners
         except Exception as e:
             logger.error(f"❌ Грешка при fallback за последни мачове: {e}")
+            self.recent_matches_cache[cache_key] = (None, None)
+            # Запис на persistent кеш
+            self._save_persistent_cache()
             return None, None
 
     def _get_league_averages(self, league_id: int, season: int = 2024) -> Tuple[float, float]:
@@ -611,6 +805,7 @@ class SmartPredictor:
         today = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"📅 Анализиране на мачове за дата: {today}")
         fixtures_data = self._request("fixtures", {"date": today, "timezone": "Europe/Sofia"})
+        logger.info(f"📊 API отговор: {fixtures_data is not None}, има response: {fixtures_data.get('response') if fixtures_data else 'N/A'}")
 
         if not fixtures_data or not fixtures_data.get("response"):
             logger.warning("⚠️  Няма мачове за днес")
@@ -640,120 +835,19 @@ class SmartPredictor:
                 home_id = fixture["teams"]["home"]["id"]
                 away_id = fixture["teams"]["away"]["id"]
 
-                # Статистики за домакина
-                home_stats_data = self._request(
-                    "teams/statistics",
-                    {"league": league_id, "season": self.SEASON, "team": home_id},
-                )
-
-                home_stats = None
-                if home_stats_data and home_stats_data.get("response"):
-                    resp = home_stats_data["response"]
-                    logger.info(
-                        f"✈️  {fixture['teams']['home']['name']} - пълен API отговор: "
-                        f"{json.dumps(resp, indent=2, ensure_ascii=False)[:1000]}..."
-                    )
-                    logger.debug(
-                        f"✈️  {fixture['teams']['home']['name']} статистики ключове: "
-                        f"{list(resp.keys())}"
-                    )
-
-                    # Извличане на голове
-                    goals_for = resp.get("goals", {}).get("for", {})
-                    goals_avg = goals_for.get("average", {}).get("total")
-                    if goals_avg is None:
-                        goals_avg = goals_for.get("total")
-                    goals_avg = float(goals_avg) if goals_avg else 1.5
-
-                    # Извличане на форма
-                    form = resp.get("form", "")
-
-                    # Извличане на картони и корнери
-                    yellow_cards_avg = self._calculate_expected_yellow_cards(
-                        resp, team_id=home_id, league_id=league_id
-                    )
-                    corners_avg = self._calculate_expected_corners(
-                        resp, team_id=home_id, league_id=league_id
-                    )
-
-                    logger.info(
-                        f"✈️  {fixture['teams']['home']['name']} - голове: {goals_avg}, "
-                        f"форма: '{form}', картони: {yellow_cards_avg}, корнери: {corners_avg}"
-                    )
-
-                    home_stats = {
-                        "form": form,
-                        "goals_avg": goals_avg,
-                        "yellow_cards_avg": yellow_cards_avg,
-                        "corners_avg": corners_avg,
-                    }
-
-                # Статистики за гостите
-                away_stats_data = self._request(
-                    "teams/statistics",
-                    {"league": league_id, "season": self.SEASON, "team": away_id},
-                )
-
-                away_stats = None
-                if away_stats_data and away_stats_data.get("response"):
-                    resp = away_stats_data["response"]
-                    logger.info(
-                        f"✈️  {fixture['teams']['away']['name']} - пълен API отговор: "
-                        f"{json.dumps(resp, indent=2, ensure_ascii=False)[:1000]}..."
-                    )
-                    logger.debug(
-                        f"✈️  {fixture['teams']['away']['name']} статистики ключове: "
-                        f"{list(resp.keys())}"
-                    )
-
-                    # Извличане на голове
-                    goals_for = resp.get("goals", {}).get("for", {})
-                    goals_avg = goals_for.get("average", {}).get("total")
-                    if goals_avg is None:
-                        goals_avg = goals_for.get("total")
-                    goals_avg = float(goals_avg) if goals_avg else 1.5
-
-                    # Извличане на форма
-                    form = resp.get("form", "")
-
-                    # Извличане на картони и корнери
-                    yellow_cards_avg = self._calculate_expected_yellow_cards(
-                        resp, team_id=away_id, league_id=league_id
-                    )
-                    corners_avg = self._calculate_expected_corners(
-                        resp, team_id=away_id, league_id=league_id
-                    )
-
-                    logger.info(
-                        f"✈️  {fixture['teams']['away']['name']} - голове: {goals_avg}, "
-                        f"форма: '{form}', картони: {yellow_cards_avg}, корнери: {corners_avg}"
-                    )
-
-                    away_stats = {
-                        "form": form,
-                        "goals_avg": goals_avg,
-                        "yellow_cards_avg": yellow_cards_avg,
-                        "corners_avg": corners_avg,
-                    }
-
-                # Ако няма статистики, използвай лигови средни като дефолт
-                if not home_stats:
-                    league_cards, league_corners = self._get_league_averages(league_id)
-                    home_stats = {
-                        "form": "",
-                        "goals_avg": 1.5,
-                        "yellow_cards_avg": league_cards,
-                        "corners_avg": league_corners,
-                    }
-
-                if not away_stats:
-                    league_cards, league_corners = self._get_league_averages(league_id)
-                    away_stats = {
-                        "form": "",
-                        "goals_avg": 1.5,
-                        "yellow_cards_avg": league_cards,
-                        "corners_avg": league_corners,
-                    }
+                # Вземане на индивидуални статистики за отборите
+                home_team_stats = self._get_team_statistics(home_id, league_id)
+                away_team_stats = self._get_team_statistics(away_id, league_id)
+                
+                # Вземане на форма от fixtures
+                home_form = self._get_team_form(home_id, league_id)
+                away_form = self._get_team_form(away_id, league_id)
+                
+                logger.info(f"📊 Forms: {fixture['teams']['home']['name']}={home_form}, {fixture['teams']['away']['name']}={away_form}")
+                
+                # Подготовка на статистики за анализ
+                home_stats = self._prepare_team_stats(home_team_stats, home_form, home_id, league_id)
+                away_stats = self._prepare_team_stats(away_team_stats, away_form, away_id, league_id)
 
                 # Анализ
                 prediction = self._analyze_match(fixture, home_stats, away_stats)
