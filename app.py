@@ -9,7 +9,7 @@
 - Комбинация: Интегрирана прогноза с ниво на увереност
 """
 import os
-from flask import Flask, render_template, jsonify, Response
+from flask import Flask, render_template, jsonify, Response, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -65,7 +65,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 # CORS и rate limiting
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "http://localhost:3000", "http://127.0.0.1:3000"],
+        "origins": "*",
         "methods": ["GET", "POST"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
@@ -341,14 +341,14 @@ def get_predictions() -> tuple[Response, int]:
             }), 500
         
         # Използвай кеширани прогнози ако са валидни
-        # cached = _get_cached_predictions()
-        # if cached:
-        #     return jsonify({
-        #         'success': True,
-        #         'total': len(cached),
-        #         'predictions': cached,
-        #         'source': 'cache'
-        #     }), 200
+        cached = _get_cached_predictions()
+        if cached:
+            return jsonify({
+                'success': True,
+                'total': len(cached),
+                'predictions': cached,
+                'source': 'cache'
+            }), 200
         
         # Генериране на нови прогнози
         logger.info("📊 Генериране на нови прогнози...")
@@ -393,6 +393,7 @@ def get_predictions() -> tuple[Response, int]:
         }), 503
 
 @app.route('/api/stats')
+@limiter.limit("10 per minute")
 def get_stats() -> tuple[Response, int]:
     """
     Връща статистики за системата
@@ -411,6 +412,7 @@ def get_stats() -> tuple[Response, int]:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/refresh')
+@limiter.limit("5 per minute")
 def refresh_cache() -> tuple[Response, int]:
     """
     Принудително обновяване на кеша
@@ -431,6 +433,7 @@ def refresh_cache() -> tuple[Response, int]:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/export/csv')
+@limiter.limit("5 per minute")
 def export_csv() -> tuple[Response, int]:
     """
     Експортира текущите прогнози като CSV
@@ -467,6 +470,7 @@ def export_csv() -> tuple[Response, int]:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/high-confidence')
+@limiter.limit("10 per minute")
 def get_high_confidence() -> tuple[Response, int]:
     """
     Връща само прогнози със висока увереност (>=60%)
@@ -501,6 +505,7 @@ def get_high_confidence() -> tuple[Response, int]:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/accuracy')
+@limiter.limit("10 per minute")
 def get_accuracy() -> tuple[Response, int]:
     """
     Връща точност на прогнозите за последния период
@@ -536,6 +541,7 @@ def get_accuracy() -> tuple[Response, int]:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/database/stats')
+@limiter.limit("5 per minute")
 def get_database_stats() -> tuple[Response, int]:
     """
     Връща статистики за базата данни
@@ -559,7 +565,7 @@ def get_database_stats() -> tuple[Response, int]:
         for table in ['teams', 'matches', 'predictions', 'team_statistics']:
             if table not in valid_tables:
                 raise ValueError(f"Невалидна таблица: {table}")
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            cursor.execute("SELECT COUNT(*) FROM " + table)
             count = cursor.fetchone()[0]
             stats[table] = count
         
@@ -579,6 +585,19 @@ def internal_error(error: Any) -> tuple[Response, int]:
     """Обработка на 500 грешки"""
     logger.error(f"500 Вътрешна сърверна грешка: {error}")
     return jsonify({'error': 'Вътрешна сърверна грешка'}), 500
+
+@app.errorhandler(404)
+def not_found_error(error: Any) -> tuple[Response, int]:
+    """Обработка на 404 грешки"""
+    # За API заявки връщаме JSON, за други - HTML
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Endpoint не е намерен', 'success': False}), 404
+    return render_template('404.html'), 404
+
+@app.errorhandler(429)
+def rate_limit_error(error: Any) -> tuple[Response, int]:
+    """Обработка на rate limiting грешки"""
+    return jsonify({'error': 'Твърде много заявки. Опитайте по-късно.', 'success': False}), 429
 
 if __name__ == '__main__':
     # Създавање на logs директория

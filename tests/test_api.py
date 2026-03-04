@@ -56,7 +56,7 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         
         data = json.loads(response.data)
-        assert 'total_predictions' in data or 'success' in data
+        assert 'api_key_configured' in data
     
     @patch('app.db')
     def test_get_database_stats_connected(self, mock_db, client):
@@ -82,8 +82,8 @@ class TestAPIEndpoints:
     def test_export_csv(self, client):
         """Тест: GET /api/export/csv"""
         response = client.get('/api/export/csv')
-        # Може да е 200 (успех) или 500 (няма данни)
-        assert response.status_code in [200, 500]
+        # Може да е 200 (успех), 400 (няма API ключ), или 500 (грешка)
+        assert response.status_code in [200, 400, 500]
     
     def test_high_confidence_predictions(self, client):
         """Тест: GET /api/high-confidence"""
@@ -96,8 +96,8 @@ class TestAPIEndpoints:
         assert response.status_code in [200, 503]
     
     def test_refresh_cache(self, client):
-        """Тест: POST /api/refresh"""
-        response = client.post('/api/refresh')
+        """Тест: GET /api/refresh"""
+        response = client.get('/api/refresh')
         assert response.status_code in [200, 500]
     
     def test_404_handler(self, client):
@@ -119,7 +119,7 @@ class TestFilters:
             {'prediction': {'confidence': 80}},
         ]
         
-        result = get_high_confidence_predictions(predictions, min_confidence=60)
+        result = get_high_confidence_predictions(predictions)
         assert len(result) == 2
     
     def test_csv_export(self):
@@ -128,12 +128,20 @@ class TestFilters:
         
         predictions = [
             {
+                'time': '15:00',
+                'league': 'Premier League',
                 'home_team': 'Team A',
                 'away_team': 'Team B',
+                'home_elo': 1600,
+                'away_elo': 1550,
+                'probabilities': {'1': 55, 'X': 25, '2': 20},
                 'prediction': {'bet': '1', 'confidence': 65},
-                'probabilities': {'home': 55, 'draw': 25, 'away': 20},
-                'time': '15:00',
-                'league': 'Premier League'
+                'over_25': 60,
+                'expected_goals': 2.5,
+                'expected_yellow_cards': 3.5,
+                'expected_corners': 9.5,
+                'home_form': 2.5,
+                'away_form': 2.0
             }
         ]
         

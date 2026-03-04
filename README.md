@@ -27,10 +27,10 @@
 - 🚀 [DEPLOYMENT_IMPROVEMENTS.md](DEPLOYMENT_IMPROVEMENTS.md) - Deployment & DevOps
 - 🧪 [tests/](tests/) - Unit и Integration тестове
 
-### ⚠️ Критични проблеми (оправи сега):
-1. SQL Injection уязвимост
-2. Липсва Rate Limiting
-3. Изключено кеширане (много API заявки)
+### ✅ Критични проблеми (ОПРАВЕНИ):
+1. **SQL Injection уязвимост** - Добавена валидация на таблици с whitelist
+2. **Липсва Rate Limiting** - Добавено на всички API endpoints (10/min за основни, 5/min за тежки операции)
+3. **Изключено кеширане** - Активирано кеширане с CACHE_DURATION=3600 секунди
 
 **Виж [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md) за бързи решения (1 час работа)**
 

@@ -86,6 +86,9 @@ async function loadPredictions() {
         document.getElementById('error').style.display = 'none';
         
         const response = await fetch('/api/predictions');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
         
         if (!data.success) {
