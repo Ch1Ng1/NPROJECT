@@ -28,11 +28,22 @@ async function fetchJson(url) {
 
 async function getPredictionsData() {
     if (HAS_REMOTE_API) {
-        const apiData = await fetchJson(buildApiUrl('/api/predictions'));
-        if (!apiData.success) {
-            throw new Error(apiData.error || 'Грешка при зареждане');
+        try {
+            const apiData = await fetchJson(buildApiUrl('/api/predictions'));
+            if (!apiData.success) {
+                throw new Error(apiData.error || 'Грешка при зареждане');
+            }
+            return apiData.predictions || [];
+        } catch (error) {
+            if (IS_GITHUB_PAGES) {
+                console.warn('Railway API недостъпен, fallback към статични данни:', error);
+                const staticData = await fetchJson(STATIC_DATA_URL);
+                if (Array.isArray(staticData)) return staticData;
+                if (Array.isArray(staticData.data)) return staticData.data;
+                return [];
+            }
+            throw error;
         }
-        return apiData.predictions || [];
     }
 
     if (IS_GITHUB_PAGES) {
@@ -297,20 +308,27 @@ function getBetLabel(bet) {
 async function exportToCSV() {
     try {
         if (!IS_GITHUB_PAGES || HAS_REMOTE_API) {
-            const response = await fetch(buildApiUrl('/api/export/csv'));
-            if (!response.ok) throw new Error('Грешка при експортиране');
+            try {
+                const response = await fetch(buildApiUrl('/api/export/csv'));
+                if (!response.ok) throw new Error('Грешка при експортиране');
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showMessage('✅ Прогнозите са експортирани успешно', 'success');
-            return;
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showMessage('✅ Прогнозите са експортирани успешно', 'success');
+                return;
+            } catch (error) {
+                if (!IS_GITHUB_PAGES) {
+                    throw error;
+                }
+                console.warn('Railway CSV export недостъпен, fallback към client-side CSV:', error);
+            }
         }
 
         const header = [
