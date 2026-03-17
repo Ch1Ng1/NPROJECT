@@ -82,6 +82,46 @@ python app.py
 
 Отвори: `http://localhost:5000`
 
+## 📄 GitHub Pages (Railway + fallback demo)
+
+Проектът вече има автоматичен deployment към GitHub Pages чрез workflow:
+
+- `.github/workflows/deploy-pages.yml`
+- `scripts/build_pages.py`
+
+Как работи:
+
+1. При push към `main` се генерира папка `pages/`
+2. В `pages/` се публикуват:
+  - статична версия на UI (`index.html`, `404.html`, `styles.css`, `script.js`)
+  - demo данни от `cache/predictions_cache.json` → `pages/data/predictions.json`
+3. GitHub Actions публикува съдържанието в GitHub Pages
+
+Важно:
+
+- GitHub Pages е **само статичен хостинг**
+- За live данни използвай външен backend (напр. Railway)
+- Ако няма конфигуриран backend, Pages автоматично ползва `data/predictions.json`
+
+### Railway backend за Pages
+
+1. Deploy-ни Flask приложението в Railway
+2. Копирай публичния URL (пример: `https://nproject-production.up.railway.app`)
+3. В GitHub repo: `Settings` → `Secrets and variables` → `Actions`
+4. Създай secret: `PAGES_API_BASE_URL` със стойност Railway URL
+5. Push към `main` (или rerun на workflow)
+
+След това GitHub Pages ще вика:
+
+- `https://...railway.app/api/predictions`
+- `https://...railway.app/api/export/csv`
+
+Активиране в GitHub:
+
+1. Repo `Settings` → `Pages`
+2. Source: `GitHub Actions`
+3. Push към `main` (или стартирай workflow ръчно от `Actions`)
+
 ## 🔗 API Endpoints
 
 | Endpoint | Описание |
