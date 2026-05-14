@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +27,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests==2.31.0
+
+      - name: Fetch today's predictions
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python scripts/fetch_predictions.py
 
       - name: Build static Pages artifact
         env:
