@@ -75,6 +75,7 @@ def _app_now() -> datetime:
 def _normalize_app_datetime(value: datetime) -> datetime:
     now_tz = _app_now().tzinfo
     if value.tzinfo is None:
+        # Backward compatibility: old cache records may be naive and are treated as APP_TIMEZONE.
         return value.replace(tzinfo=now_tz)
     return value.astimezone(now_tz)
 
