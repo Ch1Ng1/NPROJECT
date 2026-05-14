@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import requests
 from requests import RequestException
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -84,6 +85,26 @@ def _build_data() -> None:
                 logger.warning("Invalid cache timestamp '%s', skipping cache reuse", timestamp)
         if isinstance(data, list) and is_today_cache:
             predictions = data
+
+    if not predictions and PAGES_API_BASE_URL:
+        try:
+            response = requests.get(f"{PAGES_API_BASE_URL}/api/predictions", timeout=20)
+            response.raise_for_status()
+            payload = response.json()
+
+            if isinstance(payload, list):
+                predictions = payload
+            elif isinstance(payload, dict):
+                if payload.get("success") and isinstance(payload.get("data"), list):
+                    predictions = payload["data"]
+                elif isinstance(payload.get("predictions"), list):
+                    predictions = payload["predictions"]
+                elif isinstance(payload.get("data"), dict) and isinstance(
+                    payload["data"].get("predictions"), list
+                ):
+                    predictions = payload["data"]["predictions"]
+        except (RequestException, ValueError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to fetch predictions from remote API base URL: %s", exc)
 
     if not predictions and API_FOOTBALL_KEY:
         try:
