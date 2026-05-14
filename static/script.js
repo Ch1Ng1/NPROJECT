@@ -341,7 +341,7 @@ async function exportToCSV() {
                 const response = await fetch(buildApiUrl('/api/export/csv'));
                 if (!response.ok) throw new Error('Грешка при експортиране');
                 await downloadCsvResponse(response);
-                
+
                 showMessage('✅ Прогнозите са експортирани успешно', 'success');
                 return;
             } catch (error) {
@@ -352,7 +352,7 @@ async function exportToCSV() {
                 const response = await fetch('/api/export/csv');
                 if (!response.ok) throw new Error('Грешка при експортиране');
                 await downloadCsvResponse(response);
-                
+
                 showMessage('✅ Прогнозите са експортирани успешно', 'success');
                 return;
             } catch (error) {
