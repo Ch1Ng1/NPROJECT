@@ -17,6 +17,7 @@ STATIC_DIR = ROOT / "static"
 CACHE_FILE = ROOT / "cache" / "predictions_cache.json"
 PAGES_API_BASE_URL = os.getenv("PAGES_API_BASE_URL", "").strip().rstrip("/")
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "").strip()
+# Default timezone follows the app's primary BG audience and API queries in Europe/Sofia.
 PAGES_TIMEZONE = os.getenv("PAGES_TIMEZONE", "Europe/Sofia")
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ def _build_data() -> None:
                 cache_date = datetime.fromisoformat(timestamp).date()
                 is_today_cache = cache_date == _current_pages_date()
             except ValueError:
-                is_today_cache = False
+                logger.warning("Invalid cache timestamp '%s', skipping cache reuse", timestamp)
         if isinstance(data, list) and is_today_cache:
             predictions = data
 
@@ -92,7 +93,7 @@ def _build_data() -> None:
             predictions = predictor.get_today_predictions()
             if not isinstance(predictions, list):
                 predictions = []
-        except (ImportError, RequestException, RuntimeError, OSError) as exc:
+        except (ImportError, RequestException, ValueError) as exc:
             logger.warning("Failed to generate fresh predictions for Pages build: %s", exc)
             predictions = []
 
