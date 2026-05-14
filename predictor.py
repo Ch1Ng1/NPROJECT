@@ -20,6 +20,7 @@ import os
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -38,6 +39,18 @@ from constants import (
 from exceptions import APIError
 
 logger = logging.getLogger(__name__)
+PREDICTIONS_TIMEZONE = os.getenv("PREDICTIONS_TIMEZONE", "Europe/Sofia")
+
+
+def _predictions_now() -> datetime:
+    try:
+        return datetime.now(ZoneInfo(PREDICTIONS_TIMEZONE))
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "PREDICTIONS_TIMEZONE '%s' not found, falling back to UTC",
+            PREDICTIONS_TIMEZONE,
+        )
+        return datetime.now(ZoneInfo("UTC"))
 
 
 class SmartPredictor:
@@ -815,7 +828,7 @@ class SmartPredictor:
         logger.info("📊 Започване на анализ...")
 
         # Вземи мачове за днес
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = _predictions_now().strftime("%Y-%m-%d")
         logger.info(f"📅 Анализиране на мачове за дата: {today}")
         fixtures_data = self._request("fixtures", {"date": today, "timezone": "Europe/Sofia"})
         logger.info(f"📊 API отговор: {fixtures_data is not None}, има response: {fixtures_data.get('response') if fixtures_data else 'N/A'}")
