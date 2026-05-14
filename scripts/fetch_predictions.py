@@ -18,6 +18,9 @@ DEFAULT_EXPECTED_GOALS = 2.5
 DEFAULT_OVER_25 = 50.0
 DEFAULT_YELLOW = 3.6
 DEFAULT_CORNERS = 8.4
+DEFAULT_PROBABILITY_HOME = 33.3
+DEFAULT_PROBABILITY_DRAW = 33.3
+DEFAULT_PROBABILITY_AWAY = 33.4
 
 
 def _normalize_time(date_value: str | None) -> str:
@@ -35,7 +38,11 @@ def _build_default_prediction(fixture: dict[str, Any]) -> dict[str, Any]:
     away_team = fixture.get("teams", {}).get("away", {}).get("name", "Unknown Away")
     league = fixture.get("league", {})
 
-    probabilities = {"1": 33.3, "X": 33.3, "2": 33.4}
+    probabilities = {
+        "1": DEFAULT_PROBABILITY_HOME,
+        "X": DEFAULT_PROBABILITY_DRAW,
+        "2": DEFAULT_PROBABILITY_AWAY,
+    }
 
     return {
         "id": fixture.get("fixture", {}).get("id"),
@@ -114,7 +121,7 @@ def main() -> None:
         _write_cache(predictions)
         print(f"Generated predictions for {len(predictions)} matches.")
     except Exception as exc:  # noqa: BLE001
-        print(f"Error fetching predictions: {exc}")
+        print(f"Error fetching fixtures from API-Football: {exc}")
         _write_cache([])
 
 
