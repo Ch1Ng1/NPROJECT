@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -75,13 +75,13 @@ def _write_cache(predictions: list[dict[str, Any]]) -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "data": predictions,
-        "timestamp": datetime.now().replace(microsecond=0).isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     }
     CACHE_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _fetch_today_fixtures(api_key: str) -> list[dict[str, Any]]:
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     headers = {"x-apisports-key": api_key}
 
     response = requests.get(
@@ -104,7 +104,7 @@ def main() -> None:
     api_key = os.getenv("API_FOOTBALL_KEY", "").strip()
 
     if not api_key:
-        print("API_FOOTBALL_KEY липсва. Записвам празен кеш.")
+        print("API_FOOTBALL_KEY missing. Writing empty cache.")
         _write_cache([])
         return
 
@@ -112,9 +112,9 @@ def main() -> None:
         fixtures = _fetch_today_fixtures(api_key)
         predictions = [_build_default_prediction(fixture) for fixture in fixtures if isinstance(fixture, dict)]
         _write_cache(predictions)
-        print(f"Генерирани прогнози за {len(predictions)} мача.")
+        print(f"Generated predictions for {len(predictions)} matches.")
     except Exception as exc:  # noqa: BLE001
-        print(f"Грешка при зареждане на прогнози: {exc}")
+        print(f"Error fetching predictions: {exc}")
         _write_cache([])
 
 
