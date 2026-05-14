@@ -827,17 +827,21 @@ class SmartPredictor:
         # Сортиране с приоритет на приоритетни лиги
         all_fixtures = fixtures_data["response"]
 
-        # Филтриране на мачове (само топ европейски лиги)
-        fixtures = [
+        # Филтриране на мачове (приоритет: топ европейски лиги)
+        top_fixtures = [
             fixture for fixture in all_fixtures if fixture["league"]["id"] in self.TOP_LEAGUES
-        ][: self.MAX_FIXTURES]
+        ]
 
-        logger.info(f"📋 Намерени {len(all_fixtures)} мача, филтрирани до {len(fixtures)} от топ лиги")
-
-        # ЗА ТЕСТВАНЕ: Върни фиктивни прогнози вместо да анализираш истински мачове
-        if not fixtures:
-            logger.warning("⚠️  Няма мачове от топ европейски лиги днес")
-            return []
+        if top_fixtures:
+            fixtures = top_fixtures[: self.MAX_FIXTURES]
+            logger.info(
+                f"📋 Намерени {len(all_fixtures)} мача, анализирам {len(fixtures)} от топ лиги"
+            )
+        else:
+            fixtures = all_fixtures[: self.MAX_FIXTURES]
+            logger.warning(
+                f"⚠️  Няма мачове от топ лиги, fallback към всички налични: {len(fixtures)}"
+            )
 
         predictions = []
         logger.info(f"🔍 Започвам анализ на {len(fixtures)} мача")
