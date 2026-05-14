@@ -63,7 +63,7 @@ def _current_pages_date() -> date:
     try:
         return datetime.now(ZoneInfo(PAGES_TIMEZONE)).date()
     except ZoneInfoNotFoundError:
-        logger.warning("Invalid PAGES_TIMEZONE '%s', falling back to UTC", PAGES_TIMEZONE)
+        logger.warning("PAGES_TIMEZONE '%s' not found, falling back to UTC", PAGES_TIMEZONE)
         return datetime.now(ZoneInfo("UTC")).date()
 
 
@@ -92,7 +92,7 @@ def _build_data() -> None:
             predictions = predictor.get_today_predictions()
             if not isinstance(predictions, list):
                 predictions = []
-        except (ImportError, RequestException, RuntimeError, ValueError, TypeError, OSError) as exc:
+        except (ImportError, RequestException, RuntimeError, OSError) as exc:
             logger.warning("Failed to generate fresh predictions for Pages build: %s", exc)
             predictions = []
 
