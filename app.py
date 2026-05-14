@@ -63,13 +63,20 @@ APP_TIMEZONE = os.getenv('APP_TIMEZONE', 'Europe/Sofia')
 
 def _app_now() -> datetime:
     try:
-        return datetime.now(ZoneInfo(APP_TIMEZONE)).replace(tzinfo=None)
+        return datetime.now(ZoneInfo(APP_TIMEZONE))
     except ZoneInfoNotFoundError:
         logger.warning(
             "APP_TIMEZONE '%s' not found, falling back to UTC",
             APP_TIMEZONE,
         )
-        return datetime.utcnow()
+        return datetime.now(ZoneInfo("UTC"))
+
+
+def _normalize_app_datetime(value: datetime) -> datetime:
+    now_tz = _app_now().tzinfo
+    if value.tzinfo is None:
+        return value.replace(tzinfo=now_tz)
+    return value.astimezone(now_tz)
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['JSON_AS_ASCII'] = False
@@ -147,7 +154,7 @@ def _load_cache_from_file():
                 cache_data = json.load(f)
                 timestamp_str = cache_data.get('timestamp')
                 if timestamp_str:
-                    timestamp = datetime.fromisoformat(timestamp_str)
+                    timestamp = _normalize_app_datetime(datetime.fromisoformat(timestamp_str))
                     # Проверка дали е от днес
                     if timestamp.date() == _app_now().date():
                         _predictions_cache['data'] = cache_data.get('data', [])
@@ -164,9 +171,7 @@ def _is_cache_valid() -> bool:
     """Проверява дали кешът е все още валиден"""
     if _predictions_cache['data'] is None or _predictions_cache['timestamp'] is None:
         return False
-    timestamp = _predictions_cache['timestamp']
-    if timestamp.tzinfo is not None:
-        timestamp = timestamp.replace(tzinfo=None)
+    timestamp = _normalize_app_datetime(_predictions_cache['timestamp'])
     elapsed = (_app_now() - timestamp).total_seconds()
     return elapsed < _predictions_cache['cache_duration']
 

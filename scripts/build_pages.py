@@ -82,7 +82,6 @@ def _build_data() -> None:
                 is_today_cache = cache_date == _current_pages_date()
             except ValueError:
                 logger.warning("Invalid cache timestamp '%s', skipping cache reuse", timestamp)
-                is_today_cache = False
         if isinstance(data, list) and is_today_cache:
             predictions = data
 
