@@ -93,8 +93,14 @@ def _build_data() -> None:
             predictions = predictor.get_today_predictions()
             if not isinstance(predictions, list):
                 predictions = []
-        except (ImportError, RequestException, ValueError) as exc:
-            logger.warning("Failed to generate fresh predictions for Pages build: %s", exc)
+        except ImportError as exc:
+            logger.warning("Cannot import SmartPredictor dependencies for Pages build: %s", exc)
+            predictions = []
+        except RequestException as exc:
+            logger.warning("API request failed while generating fresh predictions: %s", exc)
+            predictions = []
+        except ValueError as exc:
+            logger.warning("Invalid API_FOOTBALL_KEY or prediction data for Pages build: %s", exc)
             predictions = []
 
     (PAGES_DIR / "data" / "predictions.json").write_text(
