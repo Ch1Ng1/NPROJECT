@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 import shutil
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from requests import RequestException
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES_DIR = ROOT / "pages"
@@ -57,12 +59,12 @@ def _copy_assets() -> None:
     (PAGES_DIR / ".nojekyll").write_text("", encoding="utf-8")
 
 
-def _current_pages_date() -> datetime.date:
+def _current_pages_date() -> date:
     try:
         return datetime.now(ZoneInfo(PAGES_TIMEZONE)).date()
-    except Exception:
+    except ZoneInfoNotFoundError:
         logger.warning("Invalid PAGES_TIMEZONE '%s', falling back to UTC", PAGES_TIMEZONE)
-        return datetime.utcnow().date()
+        return datetime.now(ZoneInfo("UTC")).date()
 
 
 def _build_data() -> None:
@@ -90,7 +92,7 @@ def _build_data() -> None:
             predictions = predictor.get_today_predictions()
             if not isinstance(predictions, list):
                 predictions = []
-        except Exception as exc:
+        except (ImportError, RequestException, RuntimeError, ValueError, TypeError, OSError) as exc:
             logger.warning("Failed to generate fresh predictions for Pages build: %s", exc)
             predictions = []
 
