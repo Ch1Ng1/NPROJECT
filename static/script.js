@@ -323,21 +323,24 @@ function getBetLabel(bet) {
 // ==================== Експортиране ====================
 
 async function exportToCSV() {
+    const downloadCsvResponse = async (response) => {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    };
+
     try {
         if (!HAS_REMOTE_API) {
             try {
                 const response = await fetch('/api/export/csv');
                 if (!response.ok) throw new Error('Грешка при експортиране');
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
+                await downloadCsvResponse(response);
                 
                 showMessage('✅ Прогнозите са експортирани успешно', 'success');
                 return;
@@ -348,16 +351,7 @@ async function exportToCSV() {
             try {
                 const response = await fetch(buildApiUrl('/api/export/csv'));
                 if (!response.ok) throw new Error('Грешка при експортиране');
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
+                await downloadCsvResponse(response);
                 
                 showMessage('✅ Прогнозите са експортирани успешно', 'success');
                 return;
