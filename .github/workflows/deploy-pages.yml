@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    # 06:00 UTC ~= 08:00/09:00 Europe/Sofia (DST aware via UTC offset)
+    # 06:00 UTC (08:00 EET / 09:00 EEST in Europe/Sofia)
     - cron: "0 6 * * *"
   workflow_dispatch:
 
