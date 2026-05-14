@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ STATIC_DIR = ROOT / "static"
 CACHE_FILE = ROOT / "cache" / "predictions_cache.json"
 PAGES_API_BASE_URL = os.getenv("PAGES_API_BASE_URL", "").strip().rstrip("/")
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "").strip()
+PAGES_TIMEZONE = os.getenv("PAGES_TIMEZONE", "Europe/Sofia")
+logger = logging.getLogger(__name__)
 
 
 def _prepare_pages_dir() -> None:
@@ -54,6 +57,14 @@ def _copy_assets() -> None:
     (PAGES_DIR / ".nojekyll").write_text("", encoding="utf-8")
 
 
+def _current_pages_date() -> datetime.date:
+    try:
+        return datetime.now(ZoneInfo(PAGES_TIMEZONE)).date()
+    except Exception:
+        logger.warning("Invalid PAGES_TIMEZONE '%s', falling back to UTC", PAGES_TIMEZONE)
+        return datetime.utcnow().date()
+
+
 def _build_data() -> None:
     predictions: list[dict] = []
 
@@ -65,7 +76,7 @@ def _build_data() -> None:
         if timestamp:
             try:
                 cache_date = datetime.fromisoformat(timestamp).date()
-                is_today_cache = cache_date == datetime.now(ZoneInfo("Europe/Sofia")).date()
+                is_today_cache = cache_date == _current_pages_date()
             except ValueError:
                 is_today_cache = False
         if isinstance(data, list) and is_today_cache:
@@ -80,7 +91,7 @@ def _build_data() -> None:
             if not isinstance(predictions, list):
                 predictions = []
         except Exception as exc:
-            print(f"Warning: failed to generate fresh predictions for Pages build: {exc}")
+            logger.warning("Failed to generate fresh predictions for Pages build: %s", exc)
             predictions = []
 
     (PAGES_DIR / "data" / "predictions.json").write_text(
