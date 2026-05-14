@@ -29,7 +29,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install requests
-        run: pip install requests
+        run: pip install requests==2.31.0
 
       - name: Fetch today's predictions
         env:
