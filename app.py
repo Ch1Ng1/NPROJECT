@@ -602,6 +602,27 @@ def get_database_stats() -> tuple[Response, int]:
         logger.error(f"Грешка при получаване на статистики за базата: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.after_request
+def ensure_cors_headers(response: Response) -> Response:
+    """Safety-net: добавя CORS хедъри за API routes при всички отговори (вкл. 5xx)."""
+    if request.path.startswith('/api/'):
+        response.headers.setdefault('Access-Control-Allow-Origin', '*')
+        response.headers.setdefault('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.setdefault('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
+
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def api_preflight(path: str) -> tuple[Response, int]:
+    """Explicit preflight отговор за CORS OPTIONS заявки."""
+    response = app.make_response('')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response, 204
+
+
 @app.errorhandler(500)
 def internal_error(error: Any) -> tuple[Response, int]:
     """Обработка на 500 грешки"""

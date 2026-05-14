@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
   schedule:
-    # 06:00 UTC (08:00 EET / 09:00 EEST in Europe/Sofia)
+    # 06:00 UTC (08:00 EET / 09:00 EEST in Europe/Sofia) – morning fetch
     - cron: "0 6 * * *"
+    # 17:00 UTC (19:00 EET / 20:00 EEST in Europe/Sofia) – evening fetch for La Liga / Serie A
+    - cron: "0 17 * * *"
   workflow_dispatch:
 
 permissions:
