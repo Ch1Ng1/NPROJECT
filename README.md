@@ -109,12 +109,15 @@ python app.py
 2. Копирай публичния URL (пример: `https://nproject-production.up.railway.app`)
 3. В GitHub repo: `Settings` → `Secrets and variables` → `Actions`
 4. Създай secret: `PAGES_API_BASE_URL` със стойност Railway URL
-5. Push към `main` (или rerun на workflow)
+5. Добави и secret: `API_FOOTBALL_KEY` за daily build на актуални мачове в `pages/data/predictions.json`
+6. Push към `main` (или rerun на workflow)
 
 След това GitHub Pages ще вика:
 
 - `https://...railway.app/api/predictions`
 - `https://...railway.app/api/export/csv`
+
+Workflow-ът за Pages има и daily schedule (06:00 UTC), за да се обновяват мачовете за деня автоматично.
 
 Активиране в GitHub:
 

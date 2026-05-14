@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +31,7 @@ jobs:
       - name: Build static Pages artifact
         env:
           PAGES_API_BASE_URL: ${{ secrets.PAGES_API_BASE_URL }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python scripts/build_pages.py
 
       - name: Setup Pages

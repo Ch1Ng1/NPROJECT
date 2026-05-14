@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 import shutil
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES_DIR = ROOT / "pages"
@@ -11,6 +13,7 @@ TEMPLATES_DIR = ROOT / "templates"
 STATIC_DIR = ROOT / "static"
 CACHE_FILE = ROOT / "cache" / "predictions_cache.json"
 PAGES_API_BASE_URL = os.getenv("PAGES_API_BASE_URL", "").strip().rstrip("/")
+API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "").strip()
 
 
 def _prepare_pages_dir() -> None:
@@ -56,9 +59,29 @@ def _build_data() -> None:
 
     if CACHE_FILE.exists():
         cache_json = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        timestamp = cache_json.get("timestamp")
         data = cache_json.get("data", [])
-        if isinstance(data, list):
+        is_today_cache = False
+        if timestamp:
+            try:
+                cache_date = datetime.fromisoformat(timestamp).date()
+                is_today_cache = cache_date == datetime.now(ZoneInfo("Europe/Sofia")).date()
+            except ValueError:
+                is_today_cache = False
+        if isinstance(data, list) and is_today_cache:
             predictions = data
+
+    if not predictions and API_FOOTBALL_KEY:
+        try:
+            from predictor import SmartPredictor
+
+            predictor = SmartPredictor(api_key=API_FOOTBALL_KEY)
+            predictions = predictor.get_today_predictions()
+            if not isinstance(predictions, list):
+                predictions = []
+        except Exception as exc:
+            print(f"Warning: failed to generate fresh predictions for Pages build: {exc}")
+            predictions = []
 
     (PAGES_DIR / "data" / "predictions.json").write_text(
         json.dumps(predictions, ensure_ascii=False, indent=2),
