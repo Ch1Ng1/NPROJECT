@@ -62,6 +62,7 @@ node_modules/
 # Build artifacts
 dist/
 build/
+pages/
 
 # Docker
 .dockerignore

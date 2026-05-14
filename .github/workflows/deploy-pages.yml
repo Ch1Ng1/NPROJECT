@@ -3,6 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # 06:00 UTC (08:00 EET / 09:00 EEST in Europe/Sofia) – morning fetch
+    - cron: "0 6 * * *"
+    # 17:00 UTC (19:00 EET / 20:00 EEST in Europe/Sofia) – evening fetch for La Liga / Serie A
+    - cron: "0 17 * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +34,7 @@ jobs:
       - name: Build static Pages artifact
         env:
           PAGES_API_BASE_URL: ${{ secrets.PAGES_API_BASE_URL }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python scripts/build_pages.py
 
       - name: Setup Pages

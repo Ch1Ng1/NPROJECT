@@ -20,6 +20,7 @@ import os
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -38,6 +39,18 @@ from constants import (
 from exceptions import APIError
 
 logger = logging.getLogger(__name__)
+PREDICTIONS_TIMEZONE = os.getenv("PREDICTIONS_TIMEZONE", "Europe/Sofia")
+
+
+def _predictions_now() -> datetime:
+    try:
+        return datetime.now(ZoneInfo(PREDICTIONS_TIMEZONE))
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "PREDICTIONS_TIMEZONE '%s' not found, falling back to UTC",
+            PREDICTIONS_TIMEZONE,
+        )
+        return datetime.now(ZoneInfo("UTC"))
 
 
 class SmartPredictor:
@@ -815,7 +828,7 @@ class SmartPredictor:
         logger.info("📊 Започване на анализ...")
 
         # Вземи мачове за днес
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = _predictions_now().strftime("%Y-%m-%d")
         logger.info(f"📅 Анализиране на мачове за дата: {today}")
         fixtures_data = self._request("fixtures", {"date": today, "timezone": "Europe/Sofia"})
         logger.info(f"📊 API отговор: {fixtures_data is not None}, има response: {fixtures_data.get('response') if fixtures_data else 'N/A'}")
@@ -827,17 +840,21 @@ class SmartPredictor:
         # Сортиране с приоритет на приоритетни лиги
         all_fixtures = fixtures_data["response"]
 
-        # Филтриране на мачове (само топ европейски лиги)
-        fixtures = [
+        # Филтриране на мачове (приоритет: топ европейски лиги)
+        top_fixtures = [
             fixture for fixture in all_fixtures if fixture["league"]["id"] in self.TOP_LEAGUES
-        ][: self.MAX_FIXTURES]
+        ]
 
-        logger.info(f"📋 Намерени {len(all_fixtures)} мача, филтрирани до {len(fixtures)} от топ лиги")
-
-        # ЗА ТЕСТВАНЕ: Върни фиктивни прогнози вместо да анализираш истински мачове
-        if not fixtures:
-            logger.warning("⚠️  Няма мачове от топ европейски лиги днес")
-            return []
+        if top_fixtures:
+            fixtures = top_fixtures[: self.MAX_FIXTURES]
+            logger.info(
+                f"📋 Намерени {len(all_fixtures)} мача, анализирам {len(fixtures)} от топ лиги"
+            )
+        else:
+            fixtures = all_fixtures[: self.MAX_FIXTURES]
+            logger.warning(
+                f"⚠️  Няма мачове от топ лиги, fallback към всички налични: {len(fixtures)}"
+            )
 
         predictions = []
         logger.info(f"🔍 Започвам анализ на {len(fixtures)} мача")

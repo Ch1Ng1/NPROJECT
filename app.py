@@ -20,6 +20,7 @@ import logging
 import json
 from functools import wraps
 from typing import Dict, Any, List, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from predictor import SmartPredictor
 from utils import export_predictions_to_csv, get_high_confidence_predictions
 from database import get_database, DatabaseManager
@@ -57,6 +58,26 @@ logging.basicConfig(
     handlers=[file_handler, stream_handler]
 )
 logger = logging.getLogger(__name__)
+APP_TIMEZONE = os.getenv('APP_TIMEZONE', 'Europe/Sofia')
+
+
+def _app_now() -> datetime:
+    try:
+        return datetime.now(ZoneInfo(APP_TIMEZONE))
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "APP_TIMEZONE '%s' not found, falling back to UTC",
+            APP_TIMEZONE,
+        )
+        return datetime.now(ZoneInfo("UTC"))
+
+
+def _normalize_app_datetime(value: datetime) -> datetime:
+    now_tz = _app_now().tzinfo
+    if value.tzinfo is None:
+        # Backward compatibility: old cache records may be naive and are treated as APP_TIMEZONE.
+        return value.replace(tzinfo=now_tz)
+    return value.astimezone(now_tz)
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['JSON_AS_ASCII'] = False
@@ -134,9 +155,9 @@ def _load_cache_from_file():
                 cache_data = json.load(f)
                 timestamp_str = cache_data.get('timestamp')
                 if timestamp_str:
-                    timestamp = datetime.fromisoformat(timestamp_str)
+                    timestamp = _normalize_app_datetime(datetime.fromisoformat(timestamp_str))
                     # Проверка дали е от днес
-                    if timestamp.date() == datetime.now().date():
+                    if timestamp.date() == _app_now().date():
                         _predictions_cache['data'] = cache_data.get('data', [])
                         _predictions_cache['timestamp'] = timestamp
                         logger.info("💾 Зареден кеш от файл")
@@ -151,12 +172,13 @@ def _is_cache_valid() -> bool:
     """Проверява дали кешът е все още валиден"""
     if _predictions_cache['data'] is None or _predictions_cache['timestamp'] is None:
         return False
-    elapsed = (datetime.now() - _predictions_cache['timestamp']).total_seconds()
+    timestamp = _normalize_app_datetime(_predictions_cache['timestamp'])
+    elapsed = (_app_now() - timestamp).total_seconds()
     return elapsed < _predictions_cache['cache_duration']
 
 def _get_cached_predictions() -> List[Dict[str, Any]]:
     """Връща кеширани прогнози от базата или праз списък"""
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _app_now().strftime('%Y-%m-%d')
     if db:
         try:
             cursor = db.connection.cursor()
@@ -168,7 +190,7 @@ def _get_cached_predictions() -> List[Dict[str, Any]]:
                 logger.info(f"💾 Заредени {len(predictions)} прогнози от базата за {today}")
                 # Зареди в in-memory cache
                 _predictions_cache['data'] = predictions
-                _predictions_cache['timestamp'] = datetime.now()
+                _predictions_cache['timestamp'] = _app_now()
                 return predictions
         except Exception as e:
             logger.error(f"❌ Грешка при четене от кеша: {e}")
@@ -271,12 +293,12 @@ def _update_predictions_cache(predictions: List[Dict[str, Any]]) -> None:
     """Актуализира кеша на прогнозите"""
     logger.info(f"🔄 Започвам актуализиране на кеш с {len(predictions)} прогнози")
     _predictions_cache['data'] = predictions
-    _predictions_cache['timestamp'] = datetime.now()
+    _predictions_cache['timestamp'] = _app_now()
     logger.info(f"💾 Кеш актуализиран с {len(predictions)} прогнози")
     
     # Запис в базата данни за деня
     if db and predictions:
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = _app_now().strftime('%Y-%m-%d')
         try:
             cursor = db.connection.cursor()
             cursor.execute(
@@ -579,6 +601,27 @@ def get_database_stats() -> tuple[Response, int]:
     except Exception as e:
         logger.error(f"Грешка при получаване на статистики за базата: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.after_request
+def ensure_cors_headers(response: Response) -> Response:
+    """Safety-net: добавя CORS хедъри за API routes при всички отговори (вкл. 5xx)."""
+    if request.path.startswith('/api/'):
+        response.headers.setdefault('Access-Control-Allow-Origin', '*')
+        response.headers.setdefault('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        response.headers.setdefault('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
+
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def api_preflight(path: str) -> tuple[Response, int]:
+    """Explicit preflight отговор за CORS OPTIONS заявки."""
+    response = app.make_response('')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response, 204
+
 
 @app.errorhandler(500)
 def internal_error(error: Any) -> tuple[Response, int]:

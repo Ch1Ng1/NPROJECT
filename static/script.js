@@ -7,7 +7,6 @@
 let allPredictions = [];
 const CACHE_EXPIRY = 60 * 60 * 1000; // 1 час
 const STORAGE_KEY = 'football_predictor_';
-const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io');
 const APP_CONFIG = window.__APP_CONFIG__ || {};
 const API_BASE_URL = APP_CONFIG.apiBaseUrl || '';
 const STATIC_DATA_URL = APP_CONFIG.staticDataUrl || './data/predictions.json';
@@ -26,38 +25,68 @@ async function fetchJson(url) {
     return response.json();
 }
 
+async function downloadCsvResponse(response) {
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+function extractPredictions(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.predictions)) return data.predictions;
+    return [];
+}
+
+async function fetchStaticPredictions() {
+    try {
+        const staticData = await fetchJson(STATIC_DATA_URL);
+        return extractPredictions(staticData);
+    } catch (error) {
+        console.warn('Статичните данни не са достъпни:', error);
+        return [];
+    }
+}
+
 async function getPredictionsData() {
     if (HAS_REMOTE_API) {
         try {
             const apiData = await fetchJson(buildApiUrl('/api/predictions'));
-            if (!apiData.success) {
-                throw new Error(apiData.error || 'Грешка при зареждане');
+            if (apiData.success) {
+                return extractPredictions(apiData);
             }
-            return apiData.predictions || [];
+            if (Array.isArray(apiData.predictions)) {
+                return apiData.predictions;
+            }
+            throw new Error(apiData.error || 'Грешка при зареждане');
         } catch (error) {
-            if (IS_GITHUB_PAGES) {
-                console.warn('Railway API недостъпен, fallback към статични данни:', error);
-                const staticData = await fetchJson(STATIC_DATA_URL);
-                if (Array.isArray(staticData)) return staticData;
-                if (Array.isArray(staticData.data)) return staticData.data;
-                return [];
-            }
-            throw error;
+            console.warn('Remote API недостъпен, fallback към статични данни:', error);
+            return fetchStaticPredictions();
         }
     }
 
-    if (IS_GITHUB_PAGES) {
-        const staticData = await fetchJson(STATIC_DATA_URL);
-        if (Array.isArray(staticData)) return staticData;
-        if (Array.isArray(staticData.data)) return staticData.data;
-        return [];
+    try {
+        const apiData = await fetchJson('/api/predictions');
+        if (apiData.success) {
+            return extractPredictions(apiData);
+        }
+        if (Array.isArray(apiData.predictions)) {
+            return apiData.predictions;
+        }
+        if (apiData.error) {
+            console.warn('Local API върна съобщение:', apiData.error);
+        }
+    } catch (error) {
+        console.warn('Local API недостъпен, fallback към статични данни:', error);
     }
 
-    const apiData = await fetchJson(buildApiUrl('/api/predictions'));
-    if (!apiData.success) {
-        throw new Error(apiData.error || 'Грешка при зареждане');
-    }
-    return apiData.predictions || [];
+    return fetchStaticPredictions();
 }
 
 // ==================== Управление на тема ====================
@@ -307,27 +336,27 @@ function getBetLabel(bet) {
 
 async function exportToCSV() {
     try {
-        if (!IS_GITHUB_PAGES || HAS_REMOTE_API) {
+        if (HAS_REMOTE_API) {
             try {
                 const response = await fetch(buildApiUrl('/api/export/csv'));
                 if (!response.ok) throw new Error('Грешка при експортиране');
+                await downloadCsvResponse(response);
 
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
                 showMessage('✅ Прогнозите са експортирани успешно', 'success');
                 return;
             } catch (error) {
-                if (!IS_GITHUB_PAGES) {
-                    throw error;
-                }
-                console.warn('Railway CSV export недостъпен, fallback към client-side CSV:', error);
+                console.warn('Remote CSV export недостъпен, fallback към local/client CSV:', error);
+            }
+        } else {
+            try {
+                const response = await fetch('/api/export/csv');
+                if (!response.ok) throw new Error('Грешка при експортиране');
+                await downloadCsvResponse(response);
+
+                showMessage('✅ Прогнозите са експортирани успешно', 'success');
+                return;
+            } catch (error) {
+                console.warn('Local CSV export недостъпен, fallback към client-side CSV:', error);
             }
         }
 
@@ -385,10 +414,10 @@ async function exportToCSV() {
 
 function refreshPredictions() {
     localStorage.removeItem(STORAGE_KEY + 'predictions');
-    if (IS_GITHUB_PAGES && !HAS_REMOTE_API) {
-        showMessage('ℹ️ GitHub Pages режим: зареждам статични данни', 'info');
-    } else if (IS_GITHUB_PAGES && HAS_REMOTE_API) {
-        showMessage('ℹ️ GitHub Pages режим: зареждам от Railway API', 'info');
+    if (HAS_REMOTE_API) {
+        showMessage('ℹ️ Зареждам от конфигурирания API backend', 'info');
+    } else {
+        showMessage('ℹ️ Зареждам от local API или статични данни', 'info');
     }
     loadPredictions();
 }
