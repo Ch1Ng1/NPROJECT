@@ -25,6 +25,18 @@ async function fetchJson(url) {
     return response.json();
 }
 
+async function downloadCsvResponse(response) {
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
 function extractPredictions(data) {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
@@ -323,20 +335,19 @@ function getBetLabel(bet) {
 // ==================== Експортиране ====================
 
 async function exportToCSV() {
-    const downloadCsvResponse = async (response) => {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `predictions_${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    };
-
     try {
-        if (!HAS_REMOTE_API) {
+        if (HAS_REMOTE_API) {
+            try {
+                const response = await fetch(buildApiUrl('/api/export/csv'));
+                if (!response.ok) throw new Error('Грешка при експортиране');
+                await downloadCsvResponse(response);
+                
+                showMessage('✅ Прогнозите са експортирани успешно', 'success');
+                return;
+            } catch (error) {
+                console.warn('Remote CSV export недостъпен, fallback към local/client CSV:', error);
+            }
+        } else {
             try {
                 const response = await fetch('/api/export/csv');
                 if (!response.ok) throw new Error('Грешка при експортиране');
@@ -346,17 +357,6 @@ async function exportToCSV() {
                 return;
             } catch (error) {
                 console.warn('Local CSV export недостъпен, fallback към client-side CSV:', error);
-            }
-        } else {
-            try {
-                const response = await fetch(buildApiUrl('/api/export/csv'));
-                if (!response.ok) throw new Error('Грешка при експортиране');
-                await downloadCsvResponse(response);
-                
-                showMessage('✅ Прогнозите са експортирани успешно', 'success');
-                return;
-            } catch (error) {
-                console.warn('Remote CSV export недостъпен, fallback към client-side CSV:', error);
             }
         }
 
