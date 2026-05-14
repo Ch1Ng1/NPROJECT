@@ -21,6 +21,7 @@ API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "").strip()
 # Default timezone follows the app's primary Bulgaria audience and API queries in Europe/Sofia.
 PAGES_TIMEZONE = os.getenv("PAGES_TIMEZONE", "Europe/Sofia")
 logger = logging.getLogger(__name__)
+REMOTE_API_TIMEOUT_SECONDS = 20
 
 
 def _prepare_pages_dir() -> None:
@@ -88,7 +89,9 @@ def _build_data() -> None:
 
     if not predictions and PAGES_API_BASE_URL:
         try:
-            response = requests.get(f"{PAGES_API_BASE_URL}/api/predictions", timeout=20)
+            response = requests.get(
+                f"{PAGES_API_BASE_URL}/api/predictions", timeout=REMOTE_API_TIMEOUT_SECONDS
+            )
             response.raise_for_status()
             payload = response.json()
 
